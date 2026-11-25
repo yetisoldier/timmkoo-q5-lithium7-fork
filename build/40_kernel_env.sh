@@ -46,11 +46,17 @@ DONOR_E5="${REPO_ROOT}/donors/e5fhd"
 DONOR_SEL="${REPO_ROOT}/donors/selene"
 
 # ---------------------------------------------------------------- deterministic build identity
-# Kernel banners embed build context; pin it so identical sources produce
-# byte-identical zImages across re-runs (M1a principle: same repo state +
-# same inputs ⇒ same bytes). Timestamp = fork HEAD commit time, ISO-strict.
-KBUILD_HEAD_EPOCH="$(git -C "${REPO_ROOT}" log -1 --format=%ct)"
-KBUILD_HEAD_TS="$(git -C "${REPO_ROOT}" log -1 --format=%cd --date=iso-strict-local)"
+# Anchored to the m1a TAG, not HEAD: banners/stamps must not move when new
+# commits land, or any commit would silently change the build identity
+# (mkcompile_h additionally freezes compile.h's timestamp after the first
+# build — "we don't consider the file changed if only date/time changed" — so a
+# HEAD-derived pin makes fresh O-dir builds disagree with incremental ones).
+# One fixed anchor ⇒ fresh and incremental builds agree byte-for-byte.
+KBUILD_ANCHOR_TAG=m1a
+KBUILD_HEAD_EPOCH="$(git -C "${REPO_ROOT}" show -s --format=%ct m1a^{commit})"
+KBUILD_HEAD_TS="$(git -C "${REPO_ROOT}" show -s --format=%cd --date=iso-strict-local m1a^{commit})"
+KBUILD_DATE="$(date -u -d "@${KBUILD_HEAD_EPOCH}" '+%b_%d_%Y')"   # e.g. Nov_25_2026
+KBUILD_TIME="$(date -u -d "@${KBUILD_HEAD_EPOCH}" '+%H:%M:%S')"
 export KBUILD_BUILD_VERSION=1
 export KBUILD_BUILD_TIMESTAMP="${KBUILD_HEAD_TS}"
 export KBUILD_BUILD_USER=forge
@@ -63,15 +69,7 @@ export KBUILD_BUILD_HOST=fork
 #   * The macro values MUST be whitespace-free: kbuild helpers like
 #     scripts/checksyscalls.sh re-split their args unquoted ($*), which would
 #     break on "Nov 25 2026". So the date stamp uses underscores ("Nov_25_2026").
-KBUILD_HEAD_EPOCH="$(git -C "${REPO_ROOT}" log -1 --format=%ct)"
-KBUILD_HEAD_TS="$(git -C "${REPO_ROOT}" log -1 --format=%cd --date=iso-strict-local)"
-KBUILD_DATE="$(date -u -d "@${KBUILD_HEAD_EPOCH}" '+%b_%d_%Y')"   # e.g. Nov_25_2026
-KBUILD_TIME="$(date -u -d "@${KBUILD_HEAD_EPOCH}" '+%H:%M:%S')"
 BUILD_CC="${TC}gcc -Wno-builtin-macro-redefined -U__DATE__ -U__TIME__ -D__DATE__='\"${KBUILD_DATE}\"' -D__TIME__='\"${KBUILD_TIME}\"'"
-export KBUILD_BUILD_VERSION=1
-export KBUILD_BUILD_TIMESTAMP="${KBUILD_HEAD_TS}"
-export KBUILD_BUILD_USER=forge
-export KBUILD_BUILD_HOST=fork
 export KBUILD_HEAD_EPOCH KBUILD_HEAD_TS KBUILD_DATE KBUILD_TIME
 
 # ---------------------------------------------------------------- logging
