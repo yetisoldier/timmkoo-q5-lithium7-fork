@@ -1,0 +1,17 @@
+# D8 — compiled imgsensor list → the Mint sensor trio
+# Spec: .specs/bob-m2-spec.md §3 (delta table). Forge M1b.
+# gc5004_mipi_raw + hi253_yuv + hi704_yuv. drivers/misc/mediatek/Makefile.custom
+# turns these into -DGC5004_MIPI_RAW -DHI253_YUV -DHI704_YUV plus obj-y on the
+# three driver dirs (imgsensor/src/mt6582/Makefile). DUMMYLENS fallback stays on
+# from the a106 base (D12).
+--- a/arch/arm/configs/q5_defconfig
++++ b/arch/arm/configs/q5_defconfig
+@@ -1161,7 +1161,7 @@
+ # CONFIG_CUSTOM_SEC_AUTH_SUPPORT is not set
+ CONFIG_CUSTOM_KERNEL_MAGNETOMETER=y
+ CONFIG_CUSTOM_KERNEL_BAROMETER=y
+-CONFIG_CUSTOM_KERNEL_IMGSENSOR="ov5648_mipi_raw_darling ov5648_mipi_raw_truly ov5648_mipi_raw_sunwin ov5648_mipi_raw_darling_zl hi258_mipi_yuv_cmk hi258_mipi_yuv_sw"
++CONFIG_CUSTOM_KERNEL_IMGSENSOR="gc5004_mipi_raw hi253_yuv hi704_yuv"
+ CONFIG_CUSTOM_KERNEL_LCM="hx8369b_wvga_dsi_vdo_tinno hx8369b_wvga_dsi_vdo_tinno_txd"
+ CONFIG_CUSTOM_KERNEL_FLASHLIGHT="constant_flashlight"
+ CONFIG_CUSTOM_KERNEL_EXTMD=""

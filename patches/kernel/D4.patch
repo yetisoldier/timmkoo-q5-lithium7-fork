@@ -1,0 +1,36 @@
+# D4 — Q_MAX battery-capacity values → Q5 cell (OQ-2 default 2000 mAh)
+# Spec: .specs/bob-m2-spec.md §3 (delta table). Forge M1b.
+# OQ-2: the physical battery label has not been read yet — spec default is
+# 2000 mAh; MTK fg_qmax_update_for_aging refines Qmax at runtime, so initial
+# error affects only the SOC slope. FG_METER_RESISTANCE 0 + T-temps stay a106
+# (generic Li-ion). D5/D6 are verbatim clones — asserted by 50_kernel_delta.sh.
+--- a/arch/arm/mach-mt6582/q5/power/cust_battery_meter.h
++++ b/arch/arm/mach-mt6582/q5/power/cust_battery_meter.h
+@@ -35,15 +35,19 @@
+ #define FG_METER_RESISTANCE 	0
+ 
+ /* Qmax for battery  */
+-#define Q_MAX_POS_50	1865
+-#define Q_MAX_POS_25	1841
+-#define Q_MAX_POS_0		1624
+-#define Q_MAX_NEG_10	1541
++/* Q5 Mint cell: nominal 2000 mAh (OQ-2 default — battery label not read yet).
++ * FGADC aging learning (fg_qmax_update_for_aging) refines Qmax at runtime, so
++ * initial error affects only the SOC slope, not monotonicity (bob-m2-spec §2.2).
++ */
++#define Q_MAX_POS_50	2000
++#define Q_MAX_POS_25	2000
++#define Q_MAX_POS_0		2000
++#define Q_MAX_NEG_10	2000
+ 
+-#define Q_MAX_POS_50_H_CURRENT	1797
+-#define Q_MAX_POS_25_H_CURRENT	1826
+-#define Q_MAX_POS_0_H_CURRENT	1178
+-#define Q_MAX_NEG_10_H_CURRENT	1117
++#define Q_MAX_POS_50_H_CURRENT	2000
++#define Q_MAX_POS_25_H_CURRENT	2000
++#define Q_MAX_POS_0_H_CURRENT	2000
++#define Q_MAX_NEG_10_H_CURRENT	2000
+ 
+ 
+ /* Discharge Percentage */

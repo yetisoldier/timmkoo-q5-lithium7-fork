@@ -1,0 +1,20 @@
+# D2 — assert no external charger compiled (explicit not-set adds)
+# Spec: .specs/bob-m2-spec.md §3 (delta table). Forge M1b.
+# Adds the charger-family not-set lines the a106 defconfig lacked
+# (CONFIG_MTK_MAX8971_SUPPORT / CONFIG_MTK_SNB1058_SUPPORT); the rest of the
+# family is already explicitly not-set in the a106 base (kept by q5).
+# Note: MTK_SNB1058_SUPPORT has no Kconfig symbol here so kbuild drops that
+# line from generated .config — kept as documentation; the power Makefile's
+# ifeq against an undefined var is false either way.
+# D7 (§3.2): bct24157/fan5405_user_space deliberately NOT ported.
+--- a/arch/arm/configs/q5_defconfig
++++ b/arch/arm/configs/q5_defconfig
+@@ -1364,6 +1364,8 @@
+ # CONFIG_MTK_BQ24158_SUPPORT is not set
+ # CONFIG_MTK_BQ24296_SUPPORT is not set
+ # CONFIG_MTK_BQ27541_SUPPORT is not set
++# CONFIG_MTK_MAX8971_SUPPORT is not set
++# CONFIG_MTK_SNB1058_SUPPORT is not set
+ # CONFIG_MTK_NCP1851_SUPPORT is not set
+ # CONFIG_MTK_NCP1854_SUPPORT is not set
+ # CONFIG_MTK_RT9536_SUPPORT is not set

@@ -1,0 +1,17 @@
+# D1 — external charger off — Makefile else-chain falls through to charging_hw_pmic
+# Spec: .specs/bob-m2-spec.md §3 (delta table). Forge M1b.
+# a106 base had CONFIG_MTK_FAN5405_SUPPORT=y; q5 drops it. With the charger
+# *_SUPPORT family off, drivers/misc/mediatek/power/mt6582/Makefile builds
+# charging_hw_pmic.o only (spec §2.1: Mint has NO external charger IC; the
+# SW6106 is autonomous — no charge-enable I2C/GPIO traffic may touch it).
+--- a/arch/arm/configs/q5_defconfig
++++ b/arch/arm/configs/q5_defconfig
+@@ -1359,7 +1359,7 @@
+ # CONFIG_MTK_BQ24250_SUPPORT is not set
+ # CONFIG_MTK_BQ24261_SUPPORT is not set
+ # CONFIG_MTK_BQ24196_SUPPORT is not set
+-CONFIG_MTK_FAN5405_SUPPORT=y
++# CONFIG_MTK_FAN5405_SUPPORT is not set
+ # CONFIG_MTK_FAN5402_SUPPORT is not set
+ # CONFIG_MTK_BQ24158_SUPPORT is not set
+ # CONFIG_MTK_BQ24296_SUPPORT is not set

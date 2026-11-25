@@ -1,0 +1,405 @@
+# D13 — AW87559 amp port into q5/sound (legacy i2c API) + aud-driver glue
+# Spec: .specs/bob-m2-spec.md §3 (delta table). Forge M1b.
+# Donor basis (pinned): atharvnegi/kernel_xiaomi_selene aw87xxx family + the
+# artificery-dev/tempo chip contract (register images, pulse timing, chip-id
+# retries — donors/tempo-linux-aw87559.c). MotorolaMobilityLLC/kernel-mtk was
+# probed across 11 candidate branches (nougat/oreo/pie/Q-10/S-12 families) and
+# carries NO awinic files — selene is the spec's named family fallback (§3.6);
+# deviation logged in the report. Implements Audio_eamp_command() (the
+# yusu_android_speaker.h contract) so the T-ROM audio HAL reaches the amp via
+# the stock SET/GET_EAMP_PARAMETER ioctls; the a106 yusu no-op stub is deleted
+# from this board's copy (exactly one definition links). NO enable GPIO is
+# driven: none is evidenced for the Q5 (never invent GPIO values).
+--- /dev/null
++++ b/arch/arm/mach-mt6582/q5/sound/aw87559_pa.c
+@@ -0,0 +1,314 @@
++/* aw87559_pa.c — Awinic AW87559 class-D speaker amplifier, Q5 board (bob-m2-spec §3.4, D13/D14).
++ *
++ * Legacy-3.10 port of the chip contract documented in artificery-dev/tempo
++ * (docs/porting/audio.md): enable pulse low-10ms/high-100ms, chip id 0x5a
++ * (AW87559) or 0x09 (OCA72559) at reg 0x00 with up to 5 retries, the vendor's
++ * full register image written on-enable with SYSCTRL (0x01) last, then an
++ * 80 ms settle; off mutes via SYSCTRL 0x30. The vendor register images below
++ * are the tempo-recovered values of the shipping kernel's aw87559_on /
++ * aw87559_off paths (pinned: manifests/kernel-sources.sha256
++ * donors/tempo-linux-aw87559.c).
++ *
++ * Board integration for the Q5 (D14): static i2c device at bus 2, addr 0x58 —
++ * the live Mint device enumerates "2-0058 aw87559_pa" (hardware-facts §2.5).
++ * Registration uses the legacy i2c_board_info pattern (as the in-tree FocalTech
++ * touch driver does); board info is added from an early initcall so it exists
++ * before the MTK i2c-2 adapter registers (i2c_scan_static_board_info runs only
++ * at adapter-add time in 3.10 — drivers/i2c/i2c-core.c:1062).
++ *
++ * No enable GPIO is driven: no Q5 board evidence names one (hard rule — never
++ * invent GPIO values). If the chip id read fails in the field, that failure is
++ * the G4 evidence for adding the board's EN GPIO as a follow-up delta.
++ *
++ * Aud-driver glue (D13): implements Audio_eamp_command() from
++ * yusu_android_speaker.h so the T-ROM audio HAL reaches the amp through the
++ * stock MT6582 SET/GET_EAMP_PARAMETER ioctls; the a106 yusu stub is removed
++ * from this board's copy of yusu_android_speaker.c so exactly one definition
++ * links. SETMODE maps 0 → mute (SYSCTRL-only) and non-zero → full on-image;
++ * this mapping is the observable behavior of the chip contract — HAL mode
++ * constants are not recoverable from the stripped blobs (G4 validates).
++ */
++
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/init.h>
++#include <linux/i2c.h>
++#include <linux/delay.h>
++#include <linux/mutex.h>
++#include <linux/slab.h>
++#include <linux/err.h>
++
++/* aud-driver board glue header (declares the EAMP_* subcommands and the
++ * Audio_eamp_command contract) — resolved via Makefile.custom
++ * -I$(MTK_PROJECT_PATH_ROOT)/sound/inc, same as AudDrv_Kernel.c does. */
++#include "yusu_android_speaker.h"
++
++#include "aw87559_pa.h"
++
++#define AW87559_DRVNAME		"aw87559_pa"
++
++/* ---------------------------------------------------------------- state */
++static struct i2c_client *aw87559_client;
++static DEFINE_MUTEX(aw87559_lock);
++
++static int aw87559_powered;		/* on-image applied (0 = muted/off) */
++static int aw87559_gain = -1;		/* last EAMP_SETAMP_GAIN, for EAMP_GETAMP_GAIN */
++static int aw87559_chipid = -1;
++
++/* ---------------------------------------------------------------- register images */
++/* tempo aw87559_on(): vendor full image, SYSCTRL (0x01) last, 0x01 0x30 (pre-mute) → 0x78 (run) */
++const struct aw87559_reg_sequence aw87559_on_seq[] = {
++	{ 0x62, 0xb5 }, { 0x78, 0x39 }, { 0x79, 0xe5 }, { 0x77, 0xc1 },
++	{ 0x77, 0xc1 }, { 0x78, 0x7a }, { 0x79, 0x6c }, { 0x77, 0x81 },
++	{ 0x66, 0x69 }, { 0x58, 0xbc },
++	{ 0x02, 0x16 }, { 0x03, 0x0a }, { 0x04, 0x80 }, { 0x05, 0x08 },
++	{ 0x06, 0x0c }, { 0x07, 0x85 }, { 0x08, 0x8e }, { 0x09, 0x04 },
++	{ 0x0a, 0x08 }, { 0x0b, 0x4a }, { 0x0c, 0x03 }, { 0x0d, 0x77 },
++	{ 0x0e, 0x7a }, { 0x0f, 0xa3 }, { 0x10, 0x58 },
++	{ 0x60, 0x26 }, { 0x61, 0x15 }, { 0x63, 0x5a }, { 0x64, 0xd5 },
++	{ 0x65, 0x57 }, { 0x67, 0x28 }, { 0x68, 0x35 }, { 0x69, 0x98 },
++	{ 0x70, 0x1c }, { 0x71, 0x9c }, { 0x72, 0x33 }, { 0x73, 0x40 },
++	{ 0x74, 0x6c },
++	{ 0x01, 0x30 }, { 0x01, 0x78 },
++};
++const size_t aw87559_on_seq_len = ARRAY_SIZE(aw87559_on_seq);
++
++/* tempo oca72559_on(): the drop-in-alternative chip */
++const struct aw87559_reg_sequence oca72559_on_seq[] = {
++	{ 0x02, 0x09 }, { 0x03, 0x0a }, { 0x04, 0x02 }, { 0x05, 0x09 },
++	{ 0x06, 0x01 }, { 0x07, 0x54 }, { 0x08, 0x4e }, { 0x09, 0x0b },
++	{ 0x0a, 0x10 }, { 0x0b, 0x4f }, { 0x0c, 0x00 }, { 0x0d, 0xdd },
++	{ 0x0f, 0x23 },
++	{ 0x01, 0x38 }, { 0x01, 0x7c },
++};
++const size_t oca72559_on_seq_len = ARRAY_SIZE(oca72559_on_seq);
++
++/* ---------------------------------------------------------------- primitives */
++static int aw87559_read_reg(int reg)
++{
++	return i2c_smbus_read_byte_data(aw87559_client, reg);
++}
++
++static int aw87559_write_reg(int reg, int val)
++{
++	return i2c_smbus_write_byte_data(aw87559_client, reg, val);
++}
++
++/* tempo contract: chip id with retries; the Q5 has no evidenced EN gpio, so the
++ * retries guard I2C flakiness at boot rather than doing power-cycling */
++static int aw87559_read_id(void)
++{
++	int id = -1, i, ret = -ENODEV;
++
++	for (i = 0; i <= AW87559_ID_RETRIES; i++) {
++		id = aw87559_read_reg(AW87559_REG_CHIPID);
++		if (id >= 0 && (id == AW87559_CHIPID || id == OCA72559_CHIPID)) {
++			ret = 0;
++			break;
++		}
++		if (id >= 0) {
++			pr_info("%s: chip id 0x%02x not recognised (want 0x%02x or 0x%02x), retry %d\n",
++				AW87559_DRVNAME, id, AW87559_CHIPID, OCA72559_CHIPID, i + 1);
++		}
++		msleep(5);
++	}
++	if (ret == 0)
++		aw87559_chipid = id;
++	else
++		pr_err("%s: no valid chip id after %d retries (last 0x%02x)\n",
++			AW87559_DRVNAME, AW87559_ID_RETRIES + 1, id);
++	return ret;
++}
++
++/* vendor on-image; SYSCTRL register written last; 80 ms settle before audio */
++static int aw87559_enable_amp(void)
++{
++	const struct aw87559_reg_sequence *seq;
++	size_t len, i;
++
++	if (aw87559_chipid == OCA72559_CHIPID) {
++		seq = oca72559_on_seq;
++		len = oca72559_on_seq_len;
++	} else {
++		seq = aw87559_on_seq;
++		len = aw87559_on_seq_len;
++	}
++	for (i = 0; i < len; i++) {
++		if (aw87559_write_reg(seq[i].reg, seq[i].val) < 0) {
++			pr_err("%s: on-image write reg 0x%02x failed\n",
++				AW87559_DRVNAME, seq[i].reg);
++			return -EIO;
++		}
++	}
++	msleep(80);	/* vendor path waits this long before unmuting the DAC */
++	aw87559_powered = 1;
++	return 0;
++}
++
++static void aw87559_disable_amp(void)
++{
++	/* vendor aw87559_off(): mute in SYSCTRL, then (if wired) drop the enable line */
++	if (aw87559_read_id() == 0)
++		aw87559_write_reg(AW87559_REG_SYSCTRL, AW87559_SYSCTRL_MUTE);
++	aw87559_powered = 0;
++}
++
++/* ---------------------------------------------------------------- aud glue */
++int Audio_eamp_command(unsigned int type, unsigned long args, unsigned int count)
++{
++	int ret = 0;
++
++	if (!aw87559_client)
++		return -EIO;
++
++	mutex_lock(&aw87559_lock);
++	switch (type) {
++	case EAMP_SPEAKER_OPEN:
++		if (aw87559_read_id() != 0 || aw87559_enable_amp() != 0)
++			ret = -EIO;
++		break;
++	case EAMP_SPEAKER_CLOSE:
++		aw87559_disable_amp();
++		break;
++	case EAMP_HEADPHONE_OPEN:
++	case EAMP_EARPIECE_OPEN:
++		/* the AW87559 is the Q5's speaker path only; headphone/earpiece routing
++		 * belongs to the MT6323 internal codec (tempo: "the MT6582's own on-chip
++		 * ADDA and class-D driver are not used" refers to the Y2 wiring — on the
++		 * Q5 the AW87557x family amp has no headphone output at all). Keep the
++		 * speaker amp in its current state for these commands. */
++		break;
++	case EAMP_HEADPHONE_CLOSE:
++	case EAMP_EARPIECE_CLOSE:
++		break;
++	case EAMP_GETREGISTER_VALUE:
++		ret = aw87559_read_reg((int)args);
++		break;
++	case EAMP_SETREGISTER_VALUE: {
++		/* args = kernel pointer to the aud driver's AMP_Control (yusu_android_speaker.h):
++		 * {command, param1 = register, param2 = value} */
++		unsigned long *p = (unsigned long *)args;
++		ret = aw87559_write_reg((int)p[0], (int)p[1]);
++		break;
++	}
++	case EAMP_SETAMP_GAIN:
++		/* AW87559 gain levels live in the vendor image (PAG registers); accept and
++		 * remember the HAL value — there is no per-write gain register contract
++		 * beyond the vendor image. G4 validates the audible result. */
++		aw87559_gain = (int)args;
++		break;
++	case EAMP_GETAMP_GAIN:
++		ret = aw87559_gain;
++		break;
++	case EAMP_GET_CTRP_NUM:
++	case EAMP_GET_CTRP_BITS:
++	case EAMP_GET_CTRP_TABLE:
++		/* calibration table ioctls apply to ECAP-style amps (bq27541 family);
++		 * this analog amp has none — report zero, as the a106 stub did. */
++		break;
++	case EAMP_SETMODE:
++		/* mode vocabulary is HAL-private (not string-recoverable); map hal-mode 0 to
++		 * mute and anything else to the vendor on-image (full state restore). */
++		if (args == 0)
++			aw87559_disable_amp();
++		else {
++			if (aw87559_read_id() != 0 || aw87559_enable_amp() != 0)
++				ret = -EIO;
++		}
++		break;
++	default:
++		pr_warn("%s: unknown eamp command %u\n", AW87559_DRVNAME, type);
++		ret = -EINVAL;
++	}
++	mutex_unlock(&aw87559_lock);
++	return ret;
++}
++EXPORT_SYMBOL(Audio_eamp_command);
++
++/* ---------------------------------------------------------------- i2c driver */
++static int aw87559_pa_probe(struct i2c_client *client,
++			    const struct i2c_device_id *id)
++{
++	int ret;
++
++	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA)) {
++		pr_err("%s: adapter does not support SMBUS_BYTE_DATA\n", AW87559_DRVNAME);
++		return -EIO;
++	}
++	if (client->addr != AW87559_I2C_ADDR) {
++		pr_err("%s: unexpected address 0x%02x (want 0x%02x)\n",
++			AW87559_DRVNAME, client->addr, AW87559_I2C_ADDR);
++		return -EINVAL;
++	}
++
++	aw87559_client = client;
++	i2c_set_clientdata(client, NULL);
++
++	ret = aw87559_read_id();
++	if (ret != 0) {
++		/* probe continues without a verified id only if the bus answered at all;
++		 * a dead bus leaves the amp unusable and is the G4 evidence point */
++		pr_err("%s: probe without verified chip id — amp stays muted (fix at G4 with board evidence)\n",
++			AW87559_DRVNAME);
++		aw87559_client = NULL;
++		return ret;
++	}
++	pr_info("%s: probed AW87559-family amp at bus %d addr 0x%02x (chip id 0x%02x)\n",
++		AW87559_DRVNAME, client->adapter->nr, client->addr, aw87559_chipid);
++	return 0;
++}
++
++static int aw87559_pa_remove(struct i2c_client *client)
++{
++	mutex_lock(&aw87559_lock);
++	aw87559_disable_amp();
++	aw87559_client = NULL;
++	mutex_unlock(&aw87559_lock);
++	return 0;
++}
++
++static void aw87559_pa_shutdown(struct i2c_client *client)
++{
++	mutex_lock(&aw87559_lock);
++	if (aw87559_client)
++		aw87559_disable_amp();
++	mutex_unlock(&aw87559_lock);
++}
++
++static const struct i2c_device_id aw87559_pa_id[] = {
++	{ AW87559_I2C_NAME, 0 },
++	{ }
++};
++MODULE_DEVICE_TABLE(i2c, aw87559_pa_id);
++
++static struct i2c_driver aw87559_pa_i2c_driver = {
++	.driver = {
++		.name	= AW87559_I2C_NAME,
++		.owner	= THIS_MODULE,
++	},
++	.probe		= aw87559_pa_probe,
++	.remove		= aw87559_pa_remove,
++	.shutdown	= aw87559_pa_shutdown,
++	.id_table	= aw87559_pa_id,
++};
++
++static int __init aw87559_pa_init(void)
++{
++	int ret;
++
++	ret = i2c_add_driver(&aw87559_pa_i2c_driver);
++	if (ret)
++		pr_err("%s: i2c_add_driver failed %d\n", AW87559_DRVNAME, ret);
++	return ret;
++}
++module_init(aw87559_pa_init);
++
++static void __exit aw87559_pa_exit(void)
++{
++	i2c_del_driver(&aw87559_pa_i2c_driver);
++}
++module_exit(aw87559_pa_exit);
++
++MODULE_DESCRIPTION("Awinic AW87559 speaker amplifier driver (Q5, legacy i2c API)");
++MODULE_AUTHOR("Forge (Q5 Lithium7 fork project)");
++MODULE_LICENSE("GPL");
+--- /dev/null
++++ b/arch/arm/mach-mt6582/q5/sound/aw87559_pa.h
+@@ -0,0 +1,52 @@
++/* aw87559_pa.h — Awinic AW87559 speaker amplifier, Q5 board glue (bob-m2-spec §3.4, D13).
++ *
++ * Chip contract (artificery-dev/tempo, porting/audio.md — the Y2 lineage documented
++ * the vendor's aw87559_on/aw87559_off register images; this driver is the legacy-3.10
++ * port of that contract, per D13 "self-contained I2C amp driver, legacy i2c API"):
++ *   - chip id reg 0x00: 0x5a = AW87559, 0x09 = OCA72559 (drop-in alternative)
++ *   - enable pulse: EN low 10 ms → high 100 ms; retry id read up to 5 times
++ *   - on: vendor register image, SYSCTRL (0x01) written last; then wait 80 ms
++ *   - off: SYSCTRL = 0x30 (mute) and drop the enable line
++ *
++ * Q5 board wiring (D14 / bob-m2 hardware-facts §2.5): amp at I2C bus 2, addr 0x58
++ * ("2-0058 aw87559_pa" live under Mint). The Q5 amp-enable GPIO is NOT evidenced in
++ * any live capture, so this port drives the chip over I2C only — no GPIO value is
++ * invented (hard rule, bob-m1 §2.0 / bob-m2 §4.4). If G4 shows the chip needs its
++ * EN line toggled, land the board GPIO from dmesg evidence as a follow-up delta.
++ */
++#ifndef _AW87559_PA_H_
++#define _AW87559_PA_H_
++
++#define AW87559_I2C_NAME	"aw87559_pa"
++#define AW87559_I2C_ADDR	(0x58)
++#define AW87559_I2C_BUS		(2)	/* D14: bus 2 — NOT bus 1 (hardware-facts §2.5) */
++
++#define AW87559_REG_CHIPID	0x00
++#define AW87559_REG_SYSCTRL	0x01
++
++#define AW87559_CHIPID		0x5a
++#define OCA72559_CHIPID		0x09
++
++/* the chip only answers with its enable line up; the stock Y2 contract retries id
++ * reads after power pulses before giving up (5 attempts per tempo/audio.md) */
++#define AW87559_ID_RETRIES	5
++
++/* off-state: mute via SYSCTRL, per the vendor aw87559_off image */
++#define AW87559_SYSCTRL_MUTE	0x30
++
++/* vendor on-image (tempo): every register of the vendor's aw87559_on, SYSCTRL last */
++struct aw87559_reg_sequence {
++	unsigned char reg;
++	unsigned char val;
++};
++
++extern const struct aw87559_reg_sequence aw87559_on_seq[];
++extern const size_t aw87559_on_seq_len;
++extern const struct aw87559_reg_sequence oca72559_on_seq[];
++extern const size_t oca72559_on_seq_len;
++
++/* aud driver glue (yusu_android_speaker.h contract): the audio HAL pokes the amp
++ * through the MT6582 EAMP ioctls — SET/GET_EAMP_PARAMETER land here (D13). */
++int Audio_eamp_command(unsigned int type, unsigned long args, unsigned int count);
++
++#endif /* _AW87559_PA_H_ */
+--- a/arch/arm/mach-mt6582/q5/sound/Makefile
++++ b/arch/arm/mach-mt6582/q5/sound/Makefile
+@@ -1,5 +0,0 @@
+-include $(srctree)/drivers/misc/mediatek/Makefile.custom
+-
+-obj-y	:=  yusu_android_speaker.o
+-
+-
+--- a/arch/arm/mach-mt6582/q5/sound/yusu_android_speaker.c
++++ b/arch/arm/mach-mt6582/q5/sound/yusu_android_speaker.c
+@@ -213,10 +213,6 @@
+ 		Sound_Speaker_Turnoff(Channel_Stereo);
+ }
+ 
+-int Audio_eamp_command(unsigned int type, unsigned long args, unsigned int count)
+-{
+-	return 0;
+-}
+ static char *ExtFunArray[] =
+ {
+     "InfoMATVAudioStart",

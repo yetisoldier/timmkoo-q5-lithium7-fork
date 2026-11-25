@@ -1,0 +1,29 @@
+# D14 — amp I2C bus-2 registration at 0x58 (i2c_board_info)
+# Spec: .specs/bob-m2-spec.md §3 (delta table). Forge M1b.
+# Live ground truth (hardware-facts §2.5): '2-0058 aw87559_pa' — bus 2, NOT
+# bus 1 (supersedes the earlier bus-1 note). Board info registered from an
+# early initcall so it precedes the MTK i2c-2 adapter registration
+# (i2c_scan_static_board_info runs at adapter-add, i2c-core.c:1062) — same
+# legacy pattern as the in-tree FocalTech touch driver.
+--- a/arch/arm/mach-mt6582/q5/sound/aw87559_pa.c
++++ b/arch/arm/mach-mt6582/q5/sound/aw87559_pa.c
+@@ -292,6 +292,19 @@
+ 	.id_table	= aw87559_pa_id,
+ };
+ 
++/* D14: static i2c device on bus 2 @ 0x58 (hardware-facts §2.5: "2-0058 aw87559_pa",
++ * explicitly NOT bus 1). Registered from an early initcall so the board info precedes
++ * the MTK i2c-2 adapter registration (scan happens at adapter-add, i2c-core.c:1062). */
++static struct i2c_board_info __initdata aw87559_i2c_devs = {
++	I2C_BOARD_INFO(AW87559_I2C_NAME, AW87559_I2C_ADDR),
++};
++
++static int __init aw87559_board_init(void)
++{
++	return i2c_register_board_info(AW87559_I2C_BUS, &aw87559_i2c_devs, 1);
++}
++arch_initcall(aw87559_board_init);
++
+ static int __init aw87559_pa_init(void)
+ {
+ 	int ret;
