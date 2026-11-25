@@ -83,3 +83,20 @@ d5b47a470cd426970eb91f322c51ad4471f94ba922b765c55fb4cb676361067f  donors/gslX680
 #     build/extract_gsl_fw_from_blob.py from the pinned decomp above) -----------
 bae204cb4dd1f6adce804af5fad91e9b3424847bd7a09e7faadacf3effbae680  donors/gslX680/gen-gslX680_fw_q5.h
 f2b999c930dbb0dda9c359faf31864796902b88f21d234d256de1709228859cd  donors/gslX680/gen-gslX680_key_q5.h
+#
+# --- display: GC9503V donor + LK ground truth (D18) ---------------------------
+#   y2linux    SchulzCode/Y2Linux @ c53427ae21fcefad575385e02868f322c383c36a
+#              (GPL-2.0 GC9503V/ST7701S panel driver for the Innioasis Y2
+#               eastaeon82_wet_kk MT6582 board; documents the vendor gc9503v
+#               LK-table shape, reset/reset-HIGH-suspend contract and the
+#               0x04 = xx 95 03/04 ID rule.  Corroboration donor: the D18
+#               command tables themselves are decoded from the pinned Lithium
+#               decomp, NOT from this file.)
+#   lk-q5.bin  Q5's own preboot LK (T-ROM_V2.3 = Manufactory_latest/appsboot.raw,
+#              same sha as documented by the q5-recovery base manifest).  Carries
+#              the driver names it passes to the kernel as "lcm=%1d-%s":
+#              gc9503v_wvga_dsi_vdo_hsd / gc9503v_wvga_dsi_vdo_boe /
+#              st7701_wvga_dsi_vdo_ivo / st7701_wvga_dsi_vdo_dingsj - the
+#              name-match contract the rebuilt kernel must satisfy.
+d7e64b98387a7c4573bf617b442ab382d946f384be26292f3e077dcf514a14dc  donors/y2linux/kernel/platform/panel.c
+a9b556db4ce3e8cfd381a5e9a8b5af17dd70829347c9179fc1d07b2ae6a68c6e  donors/lk-q5.bin

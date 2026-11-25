@@ -52,9 +52,11 @@ rm -rf \
   "${KDIR}/drivers/misc/mediatek/lens/mt6582/dw9714af" \
   "${KDIR}/drivers/misc/mediatek/lens/mt6582/dw9719af" \
   "${KDIR}/drivers/misc/mediatek/lens/mt6582/inc/DW9719AF.h" \
-  "${KDIR}/drivers/input/touchscreen/mediatek/gslX680"
+  "${KDIR}/drivers/input/touchscreen/mediatek/gslX680" \
+  "${KDIR}/drivers/misc/mediatek/lcm/gc9503v_wvga_dsi_vdo_hsd" \
+  "${KDIR}/drivers/misc/mediatek/lcm/gc9503v_wvga_dsi_vdo_boe"
 BAD="$(git -C "${KERNEL_REPO_ROOT}" status --porcelain \
-  | grep -v -E '^\?\? kernel-3\.10/build-(alpha|beta|beta-touch)/$' || true)"
+  | grep -v -E '^\?\? kernel-3\.10/build-(alpha|beta|beta-touch|beta-touch-lcm)/$' || true)"
 [ -z "${BAD}" ] || die "unexpected reference-tree state:
 ${BAD}"
 log "reference tree pristine (O= build-alpha/build-beta/build-beta-touch preserved for determinism)"

@@ -100,3 +100,21 @@ asserts each invariant and aborts on violation. Their deltas are *selections* an
 2. `build/50_kernel_delta.sh`: reset now also clears the D17 paths and whitelists the
    `build-beta-touch` O-dir; fresh-O-dir `mkdir -p` guards added (50 + 60) — the original
    scripts assumed pre-existing O dirs.
+
+## D18 (display must-preserve — gc9503v WVGA LCM port)
+- Invariants asserted (61_kernel_delta_lcm.sh):
+  - `q5_defconfig` LCM line == `CONFIG_CUSTOM_KERNEL_LCM="gc9503v_wvga_dsi_vdo_hsd gc9503v_wvga_dsi_vdo_boe"`,
+    zero `hx8369b` references left, `CONFIG_LCM_HEIGHT="800"`/`CONFIG_LCM_WIDTH="480"` kept;
+  - `mt65xx_lcm_list.c` carries both `gc9503v` externs + guarded list entries
+    (guards = the `-DGC9503V_WVGA_DSI_VDO_{HSD,BOE}` defines that `Makefile.custom`
+    derives from `CONFIG_CUSTOM_KERNEL_LCM`);
+  - both `drivers/misc/mediatek/lcm/gc9503v_wvga_dsi_vdo_{hsd,boe}/` dirs carry the
+    driver + Makefile, driver `.name` == the LK-matched blob string;
+  - both LCM `built-in.o` objects exist in the O dir after build;
+  - δ-parity: the four gc9503v strings (both names + both compare_id printk formats)
+    present in the blob; `hx8369b` = 0 hits; D17 and β-carry-over sets intact.
+- Data provenance: 170 command-table rows round-trip-verified byte-exact against the
+  pinned Lithium decomp (`donors/lithium-kernel.decomp`); the wiring deviation from the
+  task's literal `CONFIG_CUSTOM_KERNEL_LCM="gc9503v_wvga_dsi_vdo"` string is documented
+  in the D18.patch prologue (blob/LK name contract — an unsuffixed name cannot match
+  what the Q5's LK passes and would re-create the dark screen it fixes).
