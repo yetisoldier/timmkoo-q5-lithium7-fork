@@ -1,0 +1,23 @@
+# Agent scratch and coordination (gitignored)
+.specs/
+.karen/
+.reference-*/
+
+# Firmware images — large binaries, NOT committed to the repo
+# (they live externally under ~/.hermes/q5-recovery/ and ~/q5-flash/)
+*.img
+boot.img
+system.img
+recovery.img
+*.bin
+*.zip
+
+# Pipeline workspace and outputs (donor-derived; never committed)
+work/
+out/
+donors/
+
+# Python
+__pycache__/
+*.pyc
+.venv/

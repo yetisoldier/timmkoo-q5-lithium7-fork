@@ -1,0 +1,34 @@
+# manifests/donors.sha256 — pinned donor hashes, Q5 Lithium7 fork (M1a)
+# Pinned by Forge 2026-11-25 BEFORE first pipeline use (spec bob-m1-spec §2.0 rule 2, §2.1).
+#
+# Sections:
+#   [donor]   real on-disk files; checked with `sha256sum -c` after "~/" is expanded
+#             to $HOME by build/00_env.sh. Abort pipeline on any mismatch.
+#   [extract] files read *inside* donor images; asserted by build/10_unpack_system.sh
+#             after extraction (labels "img:DONOR:path-in-system-tree"). Abort on mismatch.
+#   The [extract] img:LITHIUM entries pin the "before" state of files changed by the
+#   M1a op table — audit trail for the 9-op table (spec §2.2).
+#
+# --- [donor] images/files read by the pipeline ----------------------------
+443e40c3b27eb9c76250e4dbae61a45e2426c1b714754ff6838c056bed85df8f  ~/q5-flash/rom/boot.img
+cd6e9b54736d5aea7cc233937061711c677b38b5aa82708059b044d50f96b0b6  ~/q5-flash/rom/system.img
+f3dcf1aa158e679e9786a84cbc0f1865b1d545e04c85eb6da628eab0762d87d6  ~/q5-flash/rom/MT6582_Android_scatter.txt
+3d5350e7fc0bb6d6b3e78a572e19217e2cc26a876844dbbc7ee513c25f1cd839  ~/.hermes/q5-recovery/base/T-ROM_V2.3/system.img
+ba1b9b916eaf978c2084a7037ade6f2e1ec4de9dd67b392f82a29aca60b3c56a  ~/.hermes/q5-recovery/base/Mint_V1.0/system.img
+#
+# --- [extract] T-ROM audio donor pair (ADR-2, spec §2.2 ops 1-3) ----------
+2510d4086dcebf692e65031f5457c7d71be25699f137ee7cb942da486f2b5349  img:TROM:lib/hw/audio.primary.mt6582.so
+579c9d04ca195d2efa5ad0c5f9f7af963e91359fc60e55666dba89f50dbfd6fd  img:TROM:etc/audio_policy.conf
+7379e023f8a543d597d0a4ce67e633ffce969b020eafb3a0197888bfb5cb32a8  img:TROM:etc/audio_effects.conf
+#
+# --- [extract] Mint ACCDET.kl (spec §2.2 op 5 — Mint content is authoritative) -
+13e1d4f88e107e7101166219b6940a9667c9892b2d5f8a51634cd9748ee230a4  img:MINT:usr/keylayout/ACCDET.kl
+#
+# --- [extract] Lithium "before" pins for changed files (audit trail) ------
+a7cc2dbe2cc2b8fd9c06d86f6f9479670a16e66bacc8941660ac81d6a370463e  img:LITHIUM:lib/hw/audio.primary.mt6582.so
+ef82488dbdb87c718786bdbde9d6c469c838d67028540eb6638cf9aa8c39a130  img:LITHIUM:etc/audio_policy.conf
+13a0b6bb634c657cf73b834c4b6a2ff00cbeccf2253c0ddb29c9e00de79b4c1c  img:LITHIUM:etc/audio_effects.conf
+dd94815692e404f3da4a7666f74baccddc2becabc45f71038fedee1936a7fafb  img:LITHIUM:vendor/etc/mixer_paths.xml
+538b7d505e8216eded40b4979dc37928348a455c990f1aba690c453e14fefbba  img:LITHIUM:usr/keylayout/mtk-kpd.kl
+52997f63cd8594575ef1addfc54acc0c52bfd3ac75dfe69baf8a98b569c2a4c7  img:LITHIUM:usr/keylayout/Generic.kl
+2180f8393b67a13671e29fde4ddb43f060367f694a0899dbca09633e702d4b7a  img:LITHIUM:build.prop
