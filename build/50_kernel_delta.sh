@@ -131,9 +131,11 @@ for sym in BQ24250 BQ24261 BQ24196 FAN5405 FAN5402 BQ24158 BQ24296 BQ27541 \
   grep -q "^# CONFIG_MTK_${sym}_SUPPORT is not set$" "${KDIR}/arch/arm/configs/q5_defconfig" \
     || die "D2 violated: ${sym} not explicitly off in q5_defconfig"
 done
-if ls "${KDIR}"/drivers/misc/mediatek/power/mt6582/bct24157* \
-      "${KDIR}"/drivers/misc/mediatek/power/mt6582/fan5405* >/dev/null 2>&1; then
-  die "D7 violated: external charger sources present"
+# D7 = NO bct24157 port (chip absent on Mint hardware; §2.1/§3.2). The fan5405*.c
+# files are the reference tree's own sources (present in the pristine clone, never
+# ported from outside) — D1 un-compiles them, proven by the δ-parity strings.
+if ls "${KDIR}"/drivers/misc/mediatek/power/mt6582/bct24157* >/dev/null 2>&1; then
+  die "D7 violated: bct24157 sources present"
 fi
 for f in keypad/mtk_kpd.h dct/dct/inc/cust_kpd.h dct/dct/inc/cust_gpio_usage.h; do
   cmp -s "${BOARD_DST}/${f}" "${BOARD_SRC}/${f}" \

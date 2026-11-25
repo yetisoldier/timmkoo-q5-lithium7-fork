@@ -25,9 +25,11 @@ asserts each invariant and aborts on violation. Their deltas are *selections* an
   govern only the PMIC-notification/UI thread. Raising AC current is explicitly forbidden
   by the D6 row.
 
-## D7 (Case B — non-delta: NO bct24157/fan5405 port)
-- Invariant asserted: no `bct24157*` / `charging_hw_fan5405*` / `fan5405*` sources exist in
-  the tree after deltas (the D1 defconfig change already un-compiled them).
+## D7 (Case B — non-delta: NO bct24157 port)
+- Invariant asserted: no `bct24157*` sources exist in the tree after deltas. The `fan5405*.c`
+  files are the reference tree's *own* sources (present in the pristine clone, never ported from
+  outside); D1 un-compiles them — proven by the δ-parity strings (`fan5405_config_interface` and
+  `charging_hw_fan5405` = 0 hits in the β blob).
 - Escalation path (§3.2 D7 row): if G3-post-flash still shows dead charging, suspects are the
   q5 charge-related GPIO/`cust_pmic` settings — escalate to Bob; do NOT improvise a driver.
 
