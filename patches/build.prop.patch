@@ -1,0 +1,11 @@
+--- a/build.prop
++++ b/build.prop
+@@ -94,7 +94,7 @@
+ ro.sys.usb.charging.only=yes
+ 
+ # temporary disable NAV bar (soft keys)
+-qemu.hw.mainkeys=1
++qemu.hw.mainkeys=0
+ 
+ # audio
+ ro.camera.sound.forced=0
