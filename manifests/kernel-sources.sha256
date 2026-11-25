@@ -1,0 +1,64 @@
+# manifests/kernel-sources.sha256 — M1b kernel-work source pins (spec bob-m2-spec §3.6/§4.0)
+# Pinned by Forge 2026-11-25 BEFORE first kernel-stage use (hard rule: hash-assert every donor).
+# Re-runs of build/45/50/55 abort loudly if any pinned input drifts (§"idempotent + hash-asserted").
+#
+# Labels are repo-relative (donors/... is a gitignored reference tree; the pins cover the exact
+# bytes copied into the kernel tree and the reference blobs used for parity/repack).
+#
+# Donor repo revisions (clone anchors):
+#   persimmon  PersimmonProject/android_kernel_archos_persimmon_3_10 @ b0f44c51517354ce769a746e0d4cf50c63c35305
+#              (mt6735m subdir chosen; its KD shape matches the 3.10 mt6582 sensor framework)
+#   oxygen     carlitros900/android_kernel_archos_oxygen @ ed79b470265fc4d997de8c7be020792322c8b4dc
+#              (REFERENCE ONLY — source of the GC5004MIPI_SENSOR_ID 0x5004 ground truth)
+#   sprout     CyanogenMod/android_kernel_mediatek_sprout @ 603890815aa034c946a95be6bbf1550f701ee093
+#   e5fhd      bq/aquaris-E5FHD @ ca20a0dbe9522e8aaab0adae2157cc6678cccb4d
+#   selene     atharvnegi/kernel_xiaomi_selene @ 3b1a2b08d1c60b1e263d26da349250a1acad0dbb  (see deviation note in report)
+#   tempo      artificery-dev/tempo @ 2a76da51a7283eae4e1175bc3a59f03b6700f4fa
+#              (AW87559 chip contract: pulse timing, register images, chip-ID retries)
+#
+# --- comparison/repack reference blobs ---------------------------------------
+d284ba1698c77267aaeafb64abd3defcb82f7d09bcc5ddbb3538e303dc69ab53  donors/lithium-kernel.decomp
+c0be6c46333b52f08dd725353f69bd6cbe8cf402838d5d7b67cfcc09522c62cf  donors/lithium-ramdisk-blob.bin
+#
+# --- camera: GC5004 main sensor (persimmon mt6735m, KD-shape matches mt6582) --
+f312a35de1701747fcfb90b78f7de814fb318e9ce5cc38d45d732ae0911b34bb  donors/mt6735m/gc5004_mipi_raw/gc5004mipiraw_Sensor.c
+31f25608194643e4dee6cc4356730fb09e413b5a281af857f266c4c0f3c90027  donors/mt6735m/gc5004_mipi_raw/gc5004mipiraw_Sensor.h
+a147bbe6acf9916e030f0cc54084cfb9ffcad034826a92e8c03aea2e9fb9deb1  donors/mt6735m/gc5004_mipi_raw/Makefile
+#
+# --- camera: HI253 / HI704 sub sensors (sprout; D9 drop-in dirs) -------------
+cd614ea01495ce0b706b1356e0f5c6c2ce325b84e09d76e641ba857b68476e62  donors/hi253_yuv/hi253yuv_Sensor.c
+439e3e7a8a3f805cd5efd58cf2202d0af8af7a45088e7af38edcffe1cf5c513e  donors/hi253_yuv/hi253yuv_Sensor.h
+b00b5ed08fd297bac420e8a0297948fbe0c383f22f8d8aa1b69f5619a258c08f  donors/hi253_yuv/hi253yuv_Camera_Sensor_para.h
+ad38f0dae9873b8e0ce8c12ec4de7247d4b3c2b2f01872a36d9b22fe9f5614a1  donors/hi253_yuv/hi253yuv_CameraCustomized.h
+e698c5aed906183fa14f5eba718d06305002d83fed01ce360db0851d98198813  donors/hi704_yuv/hi704yuv_Sensor.c
+368e1f95f6a501767c424ec70a5f31810db2d98d53adf211ee30e035b757f863  donors/hi704_yuv/hi704yuv_Sensor.h
+c989c44fc487556afe47ba740ddb9646b3a390e899fc30d157ec7b560ba5e5df  donors/hi704_yuv/hi704yuv_Camera_Sensor_para.h
+7aea21d62020c433f66ff2c9f7ceb3a4eb3d497b2582fa0c416596208270fa86  donors/hi704_yuv/hi704yuv_CameraCustomized.h
+#
+# --- lens: DW9714AF / DW9719AF (+ inc header) (bq aquaris-E5FHD mt6592 set) ---
+0b55255f1eb261fd024cbb1b77b142561b5753ae995a56fb8cf30978d03fc822  donors/mt6592/dw9714af/DW9714AF.c
+9a65582ba59ebfb857d071b126d40f8f01565d3565f61e25f71d45b0ec9eb484  donors/mt6592/dw9714af/Makefile
+adf7929db81953921be04c721be442adf28df19071199600c70b561512a828c7  donors/mt6592/dw9719af/DW9719AF.c
+819e7f36d1ff3e0f949a5effcdf810dfbb36a5d0368fc881a793807593574bce  donors/mt6592/dw9719af/Makefile
+5712130b78e7d961326a99ac56b8f2de8e08adbd427932a4db1c47bc2123a2af  donors/mt6592/inc/DW9719AF.h
+#
+# --- amp: AW87559 family sources (atharvnegi/kernel_xiaomi_selene) ------------
+1d4a9eb756cbcba49b8d14e6f315aa12fb28100a21708f35d0c57f58e4bf5688  donors/aw87559/aw87xxx.c
+95955fa2a79aa93af5fe8bff6cd0135316b39a85a1a1eb3a1faee0c436f2c724  donors/aw87559/aw87xxx.h
+910a2b9332b9bc74364f33aa9252ed73944a255e579de1476699433379d5b5e8  donors/aw87559/aw87xxx_monitor.c
+91261c745fee33fc5d4eef1815d56e19d76e54a601efe0ddca34487a16b227d1  donors/aw87559/aw87xxx_monitor.h
+7dae100bb328c831461c1bdd7d1278622520c46e97681bd97d168738bf49a676  donors/aw87559/aw_bin_parse.c
+ccf789f82615ed4ba4394403dbb53e3e9befcb39b6c49d260b2212d2f422d3a8  donors/aw87559/aw_bin_parse.h
+197143ae9d2e719811bd060cc676f0bf8886abc2a22b599f1dc86c7c05cf1d86  donors/aw87559/awinic_dsp.c
+79eec4c3f2978564a93b96ebae024f5d47961dc2c2cf550f023efadf8a5e377e  donors/aw87559/awinic_dsp.h
+6771543901697132f170f2a5a1719118afcf488827ff030e3a142ab1400f3d0f  donors/aw87559/aw87559.h
+54d189a9d47a914e29d44cc0808870a7074844ad3a98e386ec04f6051baf7a4d  donors/aw87559/aw87359.h
+15850faf417f13bb1820ceeb75c36e574d52f74700970897818b31dca4c97ae3  donors/aw87559/aw87339.h
+5324f7ddcf5d30e309b1c0ffceb4a894ac6fb54d61327f06078e52dda8c9435f  donors/aw87559/aw87369.h
+289d774141a14d69390ed8cea60109cb91dbc5de52255c6fe1ede75a4fc4f648  donors/aw87559/aw87519.h
+8c3eccb73257fb3b2507bb43247a6982461a275c749340e6e554d93afcf4ab39  donors/aw87559/Kconfig
+aad246717c4f1f12fdaa7a47e9d50cae03263c295d2d1423aefa65146b881536  donors/aw87559/Makefile
+#
+# --- amp contract reference (tempo = artificery-dev) --------------------------
+dbe4751a07a647af89ba9cb939ff0bb41bcb8dcd39230d6bcbf82298046e6794  donors/tempo-linux-aw87559.c
+ff45f04cab27c39fe8716e3fe343a9e3a34d916083682a598b345f9ff0888994  donors/tempo-audio.md
