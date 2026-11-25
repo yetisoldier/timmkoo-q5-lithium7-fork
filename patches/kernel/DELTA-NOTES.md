@@ -47,3 +47,56 @@ asserts each invariant and aborts on violation. Their deltas are *selections* an
   evidence-gated at G2), camera pins (D11 uses the same abstract `pinSet`/`IDX_PS_*`
   framework with a106 values untouched), eint/accdet unaffected. Any wrong pin surfaces as a
   G1/G2 boot-log anomaly and gets patched from dmesg evidence — never blind.
+
+# D17 additions (touch port — Forge D17; see .specs/forge-d17-report.md)
+
+## D17 (GAP-1 close — gsl_tp / GSL1680-family touch driver port)
+- Files added by `patches/kernel/D17.patch`:
+  - `drivers/input/touchscreen/mediatek/gslX680/{mtk_gslX680.c,gsl_point_id.c,Makefile,
+    gslX680_fw_q5.h,gslX680_key_q5.h}` — donor skeleton (oxygen @ed79b470 gslX68X) + the
+    Q5's own firmware extracted from the pinned Lithium blob
+    (`build/extract_gsl_fw_from_blob.py`, tiling-verified, sha-pinned in
+    `manifests/kernel-sources.sha256` as `donors/gslX680/gen-gslX680_fw_q5.h`).
+  - `arch/arm/mach-mt6582/q5/touchpanel/gsl_tp/tpd_custom_gsl_tp.h` — board glue
+    (name "gsl_tp", i2c-0 0x40, power VIO28@1.8 V + VGP1@2.8 V "TP", EINT RISING).
+- Wiring cross-checks (blob forensics, ALL evidence-locked):
+  - reset GPIO14 / INT GPIO2 = the blob's `mt_set_gpio_out(0x8000000E/0x80000002, …)` —
+    *already declared* as `GPIO_CTP_RST_PIN`/`GPIO_CTP_EINT_PIN` in the a106/q5 lineage
+    `cust_gpio_usage.h` (byte-identical file, so D16's untouched-file invariant HOLDS).
+  - EINT channel 2 RISING: the blob compiles `mt_eint_registration(2, flag=1)`; the q5
+    `cust_eint.h` (a106 clone) already carries `CUST_EINT_TOUCH_PANEL_NUM 2` (unchanged);
+    the a106-clone TYPE default (FALLING) belongs to that board's FT panel and is
+    overridden by the driver's `TPD_EINT_FLOW`.
+  - No I2C board edit needed: the driver self-registers `I2C_BOARD_INFO("gsl_tp", 0x40)`
+    on bus 0 (the in-tree ft5336/gt9xx convention; same as D14's amp pattern).
+- Invariants asserted by `build/60_kernel_delta_touch.sh`:
+  - `CONFIG_TOUCHSCREEN_MTK_GSL_TP=y` present in q5_defconfig;
+  - `cust_gpio_usage.h` still the a106 clone with GPIO2/GPIO14 CTP pins (above);
+  - extracted fw hash == pinned extraction (`D17_FW_SHA`);
+  - δ-parity: `gsl_tp/gsl1680/gsl915/gslX680/gsl_alg_id_main/gsl_config/GSLX680_FW`
+    present in the blob AND the whole β-carry-over set intact (no regression).
+- Not ported (documented absence): the blob's exported gesture symbols
+  (`gsl_GestureBuffer/gsl_GestureExtern/gsl_obtain_gesture`) — no call sites exist for
+  them in the blob's driver paths (checked over the full disassembly); the donor's
+  non-gesture point-id unit provides everything the report path uses.
+
+## M1b pipeline corrections made during D17 (recorded here as pipeline debt payoff)
+1. **D13 patch defect repair (q5/sound/Makefile hunk)**: the committed D13 hunk replaced
+   the *whole* Makefile with an empty file (`@@ -1,5 +0,0 @@`) instead of adding
+   `aw87559_pa.o`.  It went unnoticed because `build-beta/` still carried the original
+   session's `sound/built-in.o` (incremental reuse masks a missing object dir).  A fresh
+   build dir hit `ld: cannot find arch/arm/mach-mt6582/q5/sound/built-in.o`.  Repair:
+   the hunk now adds exactly the documented D13 line:
+   `obj-y := yusu_android_speaker.o aw87559_pa.o` (order verified against the original
+   session's `.built-in.o.cmd`).  Effect on m1b-β: **kernel Image bytes unchanged**
+   (proven: pinned-β vs fresh-β Images differ only in the 20-byte GNU build-id note —
+   the ld build-id hashes vmlinux metadata (symtab), not the shipped Image; string sets
+   and layout byte-identical).  Consequence: a fresh-dir β build now yields
+   zImage `9906e184b77bb57da44bdfe1ba2d401a883a09ae17b619925fd1e0f74f09861f`
+   (Image `b61c5a783ded78666bf93e73969c35074b1a80cd5c61be2bb1c653ba5b722db7`,
+   13,848,424 B), deterministic across repeated 50 runs; the m1b tag artifacts on disk
+   (`out/boot-m1b-alpha.img` `d886ccfe…`, `out/boot-m1b-beta.img` `2c3ac47a…`) are
+   untouched and remain the m1b reference bytes.
+2. `build/50_kernel_delta.sh`: reset now also clears the D17 paths and whitelists the
+   `build-beta-touch` O-dir; fresh-O-dir `mkdir -p` guards added (50 + 60) — the original
+   scripts assumed pre-existing O dirs.

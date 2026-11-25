@@ -51,12 +51,13 @@ rm -rf \
   "${KDIR}/drivers/misc/mediatek/imgsensor/src/mt6582/hi704_yuv" \
   "${KDIR}/drivers/misc/mediatek/lens/mt6582/dw9714af" \
   "${KDIR}/drivers/misc/mediatek/lens/mt6582/dw9719af" \
-  "${KDIR}/drivers/misc/mediatek/lens/mt6582/inc/DW9719AF.h"
+  "${KDIR}/drivers/misc/mediatek/lens/mt6582/inc/DW9719AF.h" \
+  "${KDIR}/drivers/input/touchscreen/mediatek/gslX680"
 BAD="$(git -C "${KERNEL_REPO_ROOT}" status --porcelain \
-  | grep -v -E '^\?\? kernel-3\.10/build-(alpha|beta)/$' || true)"
+  | grep -v -E '^\?\? kernel-3\.10/build-(alpha|beta|beta-touch)/$' || true)"
 [ -z "${BAD}" ] || die "unexpected reference-tree state:
 ${BAD}"
-log "reference tree pristine (O= build-alpha/build-beta preserved for determinism)"
+log "reference tree pristine (O= build-alpha/build-beta/build-beta-touch preserved for determinism)"
 
 # ---------------------------------------------------------------- §4.2 steps 1-2
 BOARD_SRC="${KDIR}/arch/arm/mach-mt6582/a106"
@@ -148,6 +149,7 @@ log "D1/D8 applied (defconfig), D9-D14 applied (sources)"
 # same determinism model as 45: skip the defconfig rewrite when unchanged (the
 # rewrite re-runs the MTK cust-header generators and churns __TIME__/__DATE__
 # stamps in vendor drivers even though the banner is pinned).
+mkdir -p "${BUILD_BETA}"   # kbuild's O= requires the dir to exist on first use
 BETA_CFG_CHANGING=1
 if [ -s "${BUILD_BETA}/.config" ]; then
   mkdir -p "${SCRATCH}/defconfig-probe-beta"

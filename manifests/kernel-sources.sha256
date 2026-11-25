@@ -9,7 +9,8 @@
 #   persimmon  PersimmonProject/android_kernel_archos_persimmon_3_10 @ b0f44c51517354ce769a746e0d4cf50c63c35305
 #              (mt6735m subdir chosen; its KD shape matches the 3.10 mt6582 sensor framework)
 #   oxygen     carlitros900/android_kernel_archos_oxygen @ ed79b470265fc4d997de8c7be020792322c8b4dc
-#              (REFERENCE ONLY — source of the GC5004MIPI_SENSOR_ID 0x5004 ground truth)
+#              (REFERENCE ONLY — source of the GC5004MIPI_SENSOR_ID 0x5004 ground truth;
+#               D17: touch driver donor — drivers/input/touchscreen/mediatek/gslX68X)
 #   sprout     CyanogenMod/android_kernel_mediatek_sprout @ 603890815aa034c946a95be6bbf1550f701ee093
 #   e5fhd      bq/aquaris-E5FHD @ ca20a0dbe9522e8aaab0adae2157cc6678cccb4d
 #   selene     atharvnegi/kernel_xiaomi_selene @ 3b1a2b08d1c60b1e263d26da349250a1acad0dbb  (see deviation note in report)
@@ -62,3 +63,23 @@ aad246717c4f1f12fdaa7a47e9d50cae03263c295d2d1423aefa65146b881536  donors/aw87559
 # --- amp contract reference (tempo = artificery-dev) --------------------------
 dbe4751a07a647af89ba9cb939ff0bb41bcb8dcd39230d6bcbf82298046e6794  donors/tempo-linux-aw87559.c
 ff45f04cab27c39fe8716e3fe343a9e3a34d916083682a598b345f9ff0888994  donors/tempo-audio.md
+#
+# --- touch: GSL/gsl_tp donor (D17, oxygen gslX68X driver family) ---------------
+# Consumed: mtk_gslX680.c (driver skeleton), gsl_point_id_* (gsl_alg_id_main unit),
+# Makefile (dir makefile structure); the ac70ox board config headers are pinned for
+# audit only (the port does NOT use their firmware; the Q5 extracts its own fw).
+# Priorities selene/sprout/persimmon/e5fhd carry no gsl driver (checked, see report).
+70918aab414f7ba6aed4bf758983fe1ab226a3be7aa22af254167f30947db9da  donors/gslX680/mtk_gslX680.c
+2eccc7b94c0160cf21640c9233be0ec2db8d417e3a4fce2818958ec7d5706061  donors/gslX680/gsl_point_id_point_active_pen_no_gesture.c
+815ea000f7389fb6753e3dcb3b3f442a6d425c4be20568a819dc2ba32072a5df  donors/gslX680/Makefile
+cdf1ec1fb74eaa0e860db2637c600083cbc5f3d2f0872e2f2a1fa459be90396e  donors/gslX680/ac70ox-mtk_gslX680.h
+71929581ba991d047ebc8189e6f92b15d60b6f8f5482ed0ce5b1cdbc48a3eea0  donors/gslX680/ac70ox-mtk_gslX680_public.h
+d5b47a470cd426970eb91f322c51ad4471f94ba922b765c55fb4cb676361067f  donors/gslX680/ac70ox-mtk_gslX680_factory.h
+3ed26d2537d3fe1ca43db35bad4f00445493d9f91d6d5f7bb0aa54cf89b4df7b  donors/gslX680/ac70ox-GSL3670_hxd_0786.h
+70804bb325e3584617f0a35bf9b66a8a5e24a40714ebeae77d684f93f1f7446d  donors/gslX680/ac70ox-3675_PB101JG2434.h
+13708b465f3173f068cadbb65a72c3c385d8854c3f730ade65d32a2e44521e2f  donors/gslX680/ac70ox-DXP2_0350_080A_PG.h
+#
+# --- touch: EXTRACTED Q5 firmware (D17 provenance bytes; produced by
+#     build/extract_gsl_fw_from_blob.py from the pinned decomp above) -----------
+bae204cb4dd1f6adce804af5fad91e9b3424847bd7a09e7faadacf3effbae680  donors/gslX680/gen-gslX680_fw_q5.h
+f2b999c930dbb0dda9c359faf31864796902b88f21d234d256de1709228859cd  donors/gslX680/gen-gslX680_key_q5.h

@@ -7,9 +7,10 @@
 # The boot.img header carries Lithium's exact args (boot.img-args.txt / §4.1.3) and is
 # verified field-by-field against the donor after packing.
 #
-# Usage: 55_repack_boot.sh alpha|beta
-#   alpha → BUILD_ALPHA/arch/arm/boot/zImage   → out/boot-m1b-alpha.img
-#   beta  → BUILD_BETA/arch/arm/boot/zImage    → out/boot-m1b-beta.img
+# Usage: 55_repack_boot.sh alpha|beta|beta-touch
+#   alpha       → BUILD_ALPHA/arch/arm/boot/zImage        → out/boot-m1b-alpha.img
+#   beta        → BUILD_BETA/arch/arm/boot/zImage         → out/boot-m1b-beta.img
+#   beta-touch  → build-beta-touch/arch/arm/boot/zImage   → out/boot-m1b-beta-touch.img  (D17)
 # shellcheck shell=bash
 
 set -euo pipefail
@@ -17,12 +18,13 @@ IFS=$'\n\t'
 source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/40_kernel_env.sh"
 
 require_tools python3 sha256sum stat
-[ "${2:-}" = "" ] || { usage="usage: 55_repack_boot.sh alpha|beta"; echo "${usage}" >&2; exit 64; }
+[ "${2:-}" = "" ] || { usage="usage: 55_repack_boot.sh alpha|beta|beta-touch"; echo "${usage}" >&2; exit 64; }
 TAG="${1:-}"
 case "${TAG}" in
   alpha) ZIMAGE="${BUILD_ALPHA}/arch/arm/boot/zImage" ;;
   beta)  ZIMAGE="${BUILD_BETA}/arch/arm/boot/zImage" ;;
-  *) die "tag must be 'alpha' or 'beta'" ;;
+  beta-touch) ZIMAGE="${KDIR}/build-beta-touch/arch/arm/boot/zImage" ;;
+  *) die "tag must be 'alpha', 'beta' or 'beta-touch'" ;;
 esac
 [ -s "${ZIMAGE}" ] || die "zImage missing: ${ZIMAGE} (run the corresponding build stage first)"
 [ -x "${MTK_TOOLS}/mkbootimg" ] || die "mkbootimg missing at ${MTK_TOOLS}"
