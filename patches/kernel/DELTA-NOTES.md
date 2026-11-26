@@ -206,3 +206,54 @@ asserts each invariant and aborts on violation. Their deltas are *selections* an
   defconfig changes. Image: `out/boot-m1b-beta-touch-lcm-board.img`
   sha256 `2ecb317e9ba0dc903c28219c970f42197fd59a11300c13909949fa76b7bf608f`
   (idempotent across re-runs; header fields byte-equal the donor except `ksz`).
+
+## D21 (Q5 MBR constant port + dumchar_probe init_pmt() guard — the F1 boot-panic fix)
+- `patches/kernel/D21.patch` — three touchpoints:
+  - `arch/arm/mach-mt6582/q5/partition/cust_part_mbr.c`: the LIVE
+    `MBR_START_ADDRESS_BYTE` global `12288*1024` (0xC00000, the a106/Unite-2
+    value, carried in by the board clone) → **`(0x1400000)`** = the Q5's real
+    MBR linear address. Blob trail: Lithium `init_pmt` @c050faa8 picks
+    PartInfo["mbr"], `ldrd r8,[r9,#16]` @c050fe94-9c, then `ldrd r2,[ip]` with
+    `ip = c0b5fc80` @c050fdfc-08 and `cmp r9,r3 / cmpeq r8,r2 / bne c050ff4c`
+    @c050fe0c-14 — the preset is the u64 global at **c0b5fc80 =
+    0x0000000001400000** (read from the pinned decomp d284ba16… base 0xc0008000;
+    cross-proved via lithium.elf .kernel c0008000@0x124). Scatter cross-check
+    (`.hermes/q5-recovery/spft/live-geometry/MT6582_live_scatter.txt`, project
+    j5052): MBR `linear_start_addr: 0x1400000` in EMMC_USER, PRELOADER
+    0x0–0x1400000 in EMMC_BOOT_1. The mismatch on the fork meant pmt.c:610
+    failed on EVERY boot → `mbr_invalid:` (pmt.c:628) freed every
+    `PartInfo[i].name` to NULL **without resetting `PART_NUM`** → dumchar_probe
+    walked `PART_NUM>0` NULL names → the F1 last_kmsg NULL-deref in
+    `dumchar_probe` (c04dd1e4).
+  - `drivers/misc/mediatek/dum-char/mt6582/dumchar.c` (`dumchar_probe`, at the
+    old `init_pmt();` — dumchar.c:908): capture the return:
+    `result = init_pmt(); if (result) { printk(KERN_ERR "[Dumchar]D21: …");
+    return -ENODEV; }` — loud marker + clean fail BEFORE the PART_NUM loop can
+    deref the NULL names. A plain early return (not the goto ladder) because
+    nothing has been acquired in the probe yet (kzalloc/alloc_chrdev_region
+    all come after). Any future PMT failure is diagnosable, not fatal.
+  - `drivers/misc/mediatek/mmc-host/mt6582/sd.c` (the FPGA_PLATFORM dead
+    sample block): **re-decode correction to the task row** — the
+    `#define MBR_START_ADDRESS_BYTE (0x660000)` at sd.c:231 is inside a
+    comment block (`/* … */`, sd.c:230/231) and never compiles; the vendor's
+    own sd.c consumes the cust_part_mbr.c global too (msdc_get_offset
+    @c04fa754: `rsb r0, r0, r3` with `r3 = ldr [c0b5fc80]` — no local define
+    exists in the vendor build). D21 keeps the sample table inert, adds the
+    DEAD-text note and updates the sample value 0x660000 → 0x1400000 so a
+    future de-comment cannot resurrect the stale constant.
+- **Asserts (62, extended to O dir `build-beta-touch-lcm-board2`):**
+  - source: q5 global = `(0x1400000)`; a106 origin pristine
+    (`12288 * 1024` there = no cross-board leak); sd.c carries the note +
+    `#define … (0x1400000)` and NO `0x660000`; dumchar.c has
+    `result = init_pmt();` + the D21 marker + `return -ENODEV;` and NO bare
+    `    init_pmt();` call.
+  - compiled: `cust_part_mbr.o` .data carries the `0x1400000` u64
+    (word-aligned search; a106 `0xC00000` form absent anywhere);
+    `dumchar.o` .rodata carries `D21: init_pmt() failed`; `pmt.o` keeps the
+    vendor `MBR offset invald` preset-check string. Shipped Image carries the
+    marker + the `[Dumchar]MBR address` format string (boot log will print
+    `1400000`).
+- Pipeline: 62 builds the NEW O dir `build-beta-touch-lcm-board2` (the pinned
+  M4 `beta-touch-lcm-board` artifacts stay reproducible from the pre-D21
+  history); `55_repack_boot.sh` tag `beta-touch-lcm-board2`; additive
+  O-dir whitelist hygiene in 50/60/61. No defconfig changes.

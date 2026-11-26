@@ -60,7 +60,7 @@ rm -rf \
   "${KDIR}/drivers/misc/mediatek/lcm/gc9503v_wvga_dsi_vdo_hsd" \
   "${KDIR}/drivers/misc/mediatek/lcm/gc9503v_wvga_dsi_vdo_boe"
 BAD="$(git -C "${KERNEL_REPO_ROOT}" status --porcelain \
-  | grep -v -E '^\?\? kernel-3\.10/build-(alpha|beta|beta-touch|beta-touch-lcm|beta-touch-lcm-board)/$' || true)"
+  | grep -v -E '^\?\? kernel-3\.10/build-(alpha|beta|beta-touch|beta-touch-lcm|beta-touch-lcm-board2|beta-touch-lcm-board)/$' || true)"
 [ -z "${BAD}" ] || die "unexpected reference-tree state:
 ${BAD}"
 log "reference tree pristine (O= build-alpha/build-beta/build-beta-touch/build-beta-touch-lcm preserved)"

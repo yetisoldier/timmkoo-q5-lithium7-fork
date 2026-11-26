@@ -1,0 +1,132 @@
+# D21 — the dumchar_probe NULL-deref fix: Q5 MBR constant port + init_pmt() guard.
+# Spec: .specs/forge-d21-task.md. Report: .specs/forge-d21-report.md.
+#
+# THE PANIC (F1 boot, ram-console last_kmsg): NULL deref at 0x0 in dumchar_probe
+# (c04dd1e4) ← platform_drv_probe ← really_probe ← __device_attach ←
+# bus_for_each_drv ← device_attach ← bus_probe_device ← device_add ←
+# platform_device_add ← platform_device_register, right after "init eMMC success".
+#
+# ROOT CAUSE (verified in source): dumchar.c:908 calls init_pmt() and ignores the
+# return. init_pmt() (pmt.c:536) has exactly one failure path that leaves
+# PART_NUM > 0 while nulling the names: the MBR preset check at pmt.c:610
+#   if (mbr_start_address != MBR_START_ADDRESS_BYTE)  ->  mbr_invalid: (pmt.c:628)
+# frees PartInfo[i].name (sets NULL) and returns the error WITHOUT resetting
+# PART_NUM. dumchar_probe then proceeds with PART_NUM>0 into the loop at
+# dumchar.c:932 and hits the first NULL-partition deref (the EMMC branch's
+# strcmp(PartInfo[i].name,"fat")/the "[Dumchar] %s start address" printk).
+#
+# WHY the check failed: MBR_START_ADDRESS_BYTE is the board-global from
+# arch/arm/mach-mt6582/<board>/partition/cust_part_mbr.c
+# (extern in arch/arm/mach-mt6582/include/mach/partition_define.h:10) — the
+# fork's q5 board was CLONED from a106 (D20 stage) and shipped the a106 value
+# 12288*1024 (0xC00000, Micromax Unite 2's layout). NOTE (re-decode correction
+# to the task row): the "#define MBR_START_ADDRESS_BYTE (0x660000)" the task
+# cites at mmc-host sd.c:231 is DEAD text — it sits inside the FPGA_PLATFORM
+# comment block (sd.c:230/231) and never compiles; the live compare at pmt.c:610
+# and every consumer (dumchar.c, mt_dump.c, sd.c msdc_get_offset/msdc_cal_offset)
+# use the cust_part_mbr.c global. D21 fixes the live global and keeps the dead
+# sample text inert (value updated so nobody re-enables the stale 0x660000).
+#
+# THE DECODED Q5 VALUE (blob trail, .specs/forge-d21-report.md §1): 0x1400000.
+#   - Lithium init_pmt @c050faa8: the found-"mbr" branch @c050fe94 picks
+#     PartInfo[idx] (r9 += r7*40), ldrd r8,[r9,#16] = PartInfo[i].start_address;
+#     @c050fdfc-08 ldrd r2:[ip] with ip = c0b5fc80 = the MBR_START_ADDRESS_BYTE
+#     u64 global; @c050fe0c-14 cmp r9,r3 / cmpeq r8,r2 / bne c050ff4c — the
+#     mismatch path: "MBR offset invald: MBR offset 0x%llx!=0x%llx(preset)"
+#     (@c0a6cc98 — the same string the fork's pmt.c:612 carries) + the
+#     free-names loop @c050ff8c-9c (kfree per PartInfo[i].name, stride 40).
+#   - The global's value: u64 @c0b5fc80 in the pinned decomp (d284ba16…,
+#     base 0xc0008000) = 0x0000000001400000 (20 MB). Cross-proof via the symbol
+#     ELF: .kernel vaddr c0008000 @fileoff 0x124 reads the same 8 bytes.
+#   - Scatter cross-check (.hermes/q5-recovery/spft/live-geometry/
+#     MT6582_live_scatter.txt, project j5052): MBR linear_start_addr = 0x1400000
+#     in EMMC_USER, PRELOADER 0x0–0x1400000 in EMMC_BOOT_1. 0x1400000 ✓.
+#   - Vendor sd.c consumes the SAME global (no local define): msdc_get_offset
+#     @c04fa754 = rsb r0, r0, r3 with r3 = ldr [c0b5fc80]; msdc_get_reserve
+#     @c04fa784 additionally adds 0xa800 (= 0x1500000>>9, the fork's hardcoded
+#     l_mtk_reserve — already correct for the Q5's PRO_INFO @0x1500000).
+#
+# ALSO PORTED vs the vendor: nothing else in the PMT/sd path diverges per the
+# decode — 0x1400000 global + the existing fork code shape == vendor flow.
+#
+# DEFENSIVE GUARD (dumchar.c): capture init_pmt()'s return; on failure printk a
+# loud D21 marker and fail the probe (-ENODEV) instead of walking PART_NUM>0
+# with NULL names. Chosen as a plain early return (not the goto ladder): at the
+# call site NOTHING has been acquired in dumchar_probe yet (the kzalloc of
+# dumchar_devices, alloc_chrdev_region, cdev_add all come after), so there is
+# nothing to unwind — the return IS the clean fail. Any future PMT failure is
+# diagnosable here, not fatal.
+#
+# Compiled-side proof asserted by build/62_kernel_delta_board.sh: cust_part_mbr.o
+# carries the 0x1400000 u64 (and not the a106 0xC00000); dumchar.o carries the
+# "D21: init_pmt() failed" marker; pmt.o keeps the "MBR offset invald" string.
+
+--- a/arch/arm/mach-mt6582/q5/partition/cust_part_mbr.c
++++ b/arch/arm/mach-mt6582/q5/partition/cust_part_mbr.c
+@@ -1,4 +1,20 @@
+ #include <partition_define.h>
+ #include <linux/types.h>
+ 
+-u64 MBR_START_ADDRESS_BYTE = 12288 * 1024;
++/*
++ * D21 — the Q5 MBR linear address (decode trail: .specs/forge-d21-report.md §1).
++ * The a106 lineage shipped 12288*1024 (0xC00000 — Unite 2's layout); the Q5's
++ * MBR sits at 0x1400000. Blob truth (Lithium, 5217dd41…/d284ba16…, base
++ * 0xc0008000): init_pmt @c050fdfc ldrd's the preset u64 from
++ * MBR_START_ADDRESS_BYTE @c0b5fc80 = 0x0000000001400000 and cmp/cmpeq's it
++ * against PartInfo["mbr"].start_address @c050fe0c-14; mismatch -> the
++ * "MBR offset invald …(preset)" pmt_err @c0a6cc98 + the NULL-name free loop
++ * @c050ff4c-9c. Scatter cross-check: MT6582_live_scatter.txt (project j5052,
++ * .hermes/q5-recovery/spft/live-geometry/) MBR linear_start_addr = 0x1400000
++ * with PRELOADER 0x0-0x1400000 in EMMC_BOOT_1. This global feeds the preset
++ * check at pmt.c:610 and the consumers in dumchar.c/mt_dump.c/sd.c; on the
++ * fork the a106 preset lost the check on every boot and pmt.c's mbr_invalid
++ * path (pmt.c:610->628) freed PartInfo[i].name while leaving PART_NUM>0 —
++ * the F1 boot's dumchar_probe NULL-deref panic (c04dd1e4, ram-console
++ * last_kmsg). See also the D21 dead-text note in mmc-host sd.c. */
++u64 MBR_START_ADDRESS_BYTE = (0x1400000);
+--- a/drivers/misc/mediatek/mmc-host/mt6582/sd.c
++++ b/drivers/misc/mediatek/mmc-host/mt6582/sd.c
+@@ -228,7 +228,15 @@
+ #define PWR_GPIO_L4_DIR_MASK             (~(1 << 11))
+ 
+ /*
+-#define MBR_START_ADDRESS_BYTE (0x660000)
++ D21: the MT6575-era sample table below is DEAD text — it sits inside this
++ comment block (and #ifdef FPGA_PLATFORM) and never compiles. The live MBR
++ constant is the cust_part_mbr.c global MBR_START_ADDRESS_BYTE (D21: now the
++ Q5's 0x1400000); the vendor's own sd.c consumes that global, too
++ (msdc_get_offset @c04fa754: rsb r0, r0, r3 with r3 = ldr [c0b5fc80], the u64
++ global = 0x1400000 — no local define exists in the vendor build). The
++ 0x660000 sample value was neither the a106 global (0xC00000) nor the Q5's;
++ updated to 0x1400000 so a future de-comment cannot resurrect the stale value.
++#define MBR_START_ADDRESS_BYTE (0x1400000)
+ 
+ #define PART_NUM  20
+ 
+--- a/drivers/misc/mediatek/dum-char/mt6582/dumchar.c
++++ b/drivers/misc/mediatek/dum-char/mt6582/dumchar.c
+@@ -905,7 +905,22 @@
+ 	printk("[Dumchar_probe]define  User_Region_Header (BOOT1 size + BOOT2 Size + RPMB Size)\n");
+ 	printk("[Dumchar_probe]*******************Introduction******************\n");
+ 
+-    init_pmt();
++    result = init_pmt();
++    if (result) {
++        /* D21 (forge-d21-report §2): init_pmt() owns exactly one failure path
++         * that leaves PART_NUM>0 while every PartInfo[i].name is freed to
++         * NULL — pmt.c mbr_invalid (the preset check at pmt.c:610 vs
++         * MBR_START_ADDRESS_BYTE, the cust_part_mbr.c global, now the Q5's
++         * 0x1400000). The old code ignored the return and dereferenced the
++         * NULL names below — the F1 boot's dumchar_probe NULL-deref panic
++         * (c04dd1e4 in the ram-console last_kmsg). Nothing has been acquired
++         * in this function yet, so a plain early return IS the clean fail;
++         * any future PMT failure must be diagnosable here, not fatal. */
++        printk(KERN_ERR "[Dumchar]D21: init_pmt() failed (err=%d) - PMT/MBR "
++               "state unusable; failing probe instead of dereferencing the "
++               "NULL PartInfo names\n", result);
++        return -ENODEV;
++    }
+ #ifdef CONFIG_MTK_EMMC_CACHE
+     msdc_get_cache_region(); 
+ #endif
