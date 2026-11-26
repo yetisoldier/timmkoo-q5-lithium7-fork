@@ -41,6 +41,7 @@ def main():
     ramdisk = gzip.decompress(boot[roff + 512:roff + rsz])
     init = next(data for name, data, *_ in entries(ramdisk) if name.lstrip('./') == 'init.mt6582.rc')
     assert b'mknod /dev/fm c 193' not in init, 'Apply patch_fm_boot_node.py before packaging'
+    assert b'on property:init.svc.mediacodec=running' in init and b'q5-codec-limits.sh' in init, 'Apply patch_codec_boot.py before packaging'
     usb = next(data for name, data, *_ in entries(ramdisk) if name.lstrip('./') == 'init.mt6582.usb.rc')
     for mode in [b'mtp', b'mtp,adb']:
         action = re.search(rb'(?ms)^on property:sys.usb.config=' + mode + rb'\n.*?(?=^on |\Z)', usb)
@@ -48,6 +49,16 @@ def main():
     with a.system.open('rb') as f:
         f.seek(1080)
         assert f.read(2) == b'\x53\xef', 'Expected raw ext4 image'
+    system_manifest_path = a.system.with_suffix('.json')
+    system_manifest = json.loads(system_manifest_path.read_text())
+    assert system_manifest['output_sha256'] == sha(a.system), 'System differs from its defaults-build manifest'
+    for required in ['/etc/q5-codec-limits.sh', '/lib/libq5.so',
+                     '/lib/libvcodec_utility.so', '/etc/media_codecs.xml',
+                     '/priv-app/CMParts/CMParts.apk',
+                     '/priv-app/Q5FMRadio/Q5FMRadio.apk',
+                     '/app/Q5AudioRecorder/Q5AudioRecorder.apk',
+                     '/app/webview/webview.apk']:
+        assert required in system_manifest['changes'], required
     text = a.scatter.read_text()
     assert 'platform: MT6582' in text
     sections = re.split(r'(?m)(?=^- partition_index:)', text)
@@ -70,6 +81,7 @@ def main():
     a.out.mkdir(parents=True)  # Refuse to overwrite an existing package.
     for src, name in [(a.boot, 'boot.img'), (a.system, 'system.img'), (a.logo, 'logo.bin')]:
         shutil.copyfile(src, a.out / name)
+    shutil.copyfile(system_manifest_path, a.out / 'system-build.json')
     (a.out / 'MT6582_Android_scatter.txt').write_text(''.join(sections))
     (a.out / 'README.txt').write_text('''Q5 Mint / MT6582 Lithium 7 DEVELOPMENT CHECKPOINT
 
@@ -83,17 +95,22 @@ change Settings > Buttons > Show navigation buttons to hide/show them.
 Gnome boot/default wallpaper. Jelly and HTMLViewer browser apps removed.
 Unused Lawnfeed update/install prompts disabled. Open Camera and Xposed
 Installer removed. Camera omitted per purchase evidence; no fitted sensor is
-confirmed. Mint FM receiver and Audio Recorder included. USB MTP transfer fixed.
+confirmed. Lineage FM receiver and Audio Recorder included. USB MTP transfer fixed.
 FM needs wired
 headphones as an antenna; RF reception and Bluetooth audio need physical tests.
+Hardware H.264 720p playback restored; the 1080p test uses software fallback.
+Embedded WebView 119 fixes Audiobookshelf's collapsed server connection controls.
+Audiobookshelf, Plexamp and Apple Music are separate test installations in
+userdata and are not bundled in this system image.
 
 Use SP Flash Tool DOWNLOAD ONLY with the included scatter. Only BOOTIMG,
 ANDROID and LOGO are selected. Do not enable additional partitions or choose
 Format All / Firmware Upgrade. No preloader, partition table, userdata,
 recovery, NVRAM or calibration images are included.
 
-System image derives from a read-only snapshot of the tested live system,
-cleaned on a separate copy with e2fsck. This is not a clean-install validation.
+System image is generated from a read-only development-system snapshot with
+the reproducible defaults/media changes applied to a separate copy. Filesystem
+checks passed. This is not a factory-reset/clean-install validation.
 Installing this package does not reset existing user preferences or apps.
 Browser removal is not a complete parental-control or network-filtering system.
 

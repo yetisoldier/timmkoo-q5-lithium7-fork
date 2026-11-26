@@ -1,0 +1,11 @@
+{
+  "package": "com.android.webview",
+  "version": "119.0.6045.134",
+  "version_code": 604513400,
+  "repository": "https://github.com/LineageOS/android_external_chromium-webview_prebuilt_arm",
+  "commit": "6d883cfe7f5f50470b29b21c26aa204205186a1a",
+  "path": "webview.apk",
+  "sha256": "feeedd44677f5643e2de2de4a44061f7bd31a662e78909d6e052b4fe1468870a",
+  "size": 83580708,
+  "lfs_batch": "https://review.lineageos.org/LineageOS/android_external_chromium-webview_prebuilt_arm.git/info/lfs/objects/batch"
+}

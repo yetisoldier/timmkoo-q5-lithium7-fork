@@ -1,11 +1,11 @@
 {
   "fm": {
-    "package": "com.mediatek.FMRadio",
-    "name": "Mint FM Radio (Q5 Nougat compatibility build)",
-    "source": "https://github.com/Sendew/TIMMKOO-Q5-Mint-Custom-ROM",
-    "builder": "build/build_mint_fm.py",
+    "package": "com.android.fmradio",
+    "name": "FM Radio (Lineage Android 7, Q5 kernel ABI)",
+    "source": "https://github.com/LineageOS/android_packages_apps_FMRadio",
+    "builder": "build/build_lineage_fm.py",
     "install": "/system/priv-app/Q5FMRadio",
-    "reason": "Original MT6627 receiver app with isolated JNI, current kernel ioctl sizes, and media-group permission. Receiver only; transmitter companion is registration-only."
+    "reason": "Android 7 audio routing and music-stream volume controls, with the original Lithium receiver JNI adapted to this kernel's ioctl sizes. Requires persist.af.audio_patch_fm=1 and a privileged system install."
   },
   "recorder": {
     "package": "com.github.axet.audiorecorder",

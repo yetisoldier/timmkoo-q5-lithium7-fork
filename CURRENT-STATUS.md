@@ -5,7 +5,7 @@ Touch, physical Home, speaker and headphone playback work. Native Home
 shortcuts and browser removal are installed. **Camera omitted per product evidence; no fitted sensor is confirmed.**
 This is a development build, not a fully functional release.
 
-The current installed boot is **D42-R2** (D42 kernel, corrected FM and USB ramdisk): D39 plus default-off camera
+The current installed boot is **D42-R3** (D42 kernel, corrected FM, USB and codec startup ramdisk): D39 plus default-off camera
 diagnostics (D40–D42). D42 boots, passes the native Home policy regression,
 and retains mainkeys=0 and zero browser handlers. The Settings visibility switch
 uses secure navigation_bar_visible independently of this property. Keep D39 as the user-confirmed
@@ -33,6 +33,9 @@ The original synthesized 25-second test track is now in internal
 provider. The older public-volume path is obsolete. Generate the song with
 `build/make_test_song.py`.
 
+See [MEDIA-BRINGUP.md](MEDIA-BRINGUP.md) for restored hardware H.264 playback.
+See [FM-BRINGUP.md](FM-BRINGUP.md) for the current Android 7 FM app, corrected
+JNI, required audio-patch property and listening-test boundary.
 See [FUNCTIONAL-AUDIT.md](FUNCTIONAL-AUDIT.md) for FM/recorder additions,
 app-data repair, navigation controls and remaining physical validation.
 
@@ -231,12 +234,13 @@ Build default system files on an unmounted raw ext4 COPY under Linux/WSL:
 ```bash
 python3 build/apply_system_defaults.py --input /path/to/lithium-system.raw.img \
   --out out/system-defaults.img --branding out/branding \
-  --gestures out/home-gestures --fm out/fm-nougat/FMRadio.apk \
-  --recorder /path/to/AudioRecorder-3.5.23.apk
+    --gestures out/home-gestures --fm out/fm-lineage/FMRadio.apk \
+  --recorder /path/to/AudioRecorder-3.5.23.apk --media out/media-compat \
+  --webview /path/to/Lineage-WebView-119.apk
 ```
 
 This removes Jelly/HTMLViewer/OpenCamera/Xposed Installer, installs branding,
-native shortcuts, Mint FM and Audio Recorder, prunes unsupported camera/gyro/compass
+native shortcuts, Lineage FM, WebView 119 and Audio Recorder, prunes unsupported camera/gyro/compass
 feature declarations, forces `qemu.hw.mainkeys=0`, preserves the hash-pinned original audio
 HAL, applies system-file labels, and checks ext4 with e2fsck. Tested against
 the D36 system snapshot; the resulting image passes a second read-only fsck.
@@ -257,11 +261,11 @@ is outdated, rather than comparing that ambiguous state. It also defaults the
 optional swipe-to-install feed prompts off. Google feed itself already defaults
 off. No feed updater or Google app needs to be added for a music-player build.
 
-Xposed Installer is bundled in `/system/priv-app/XposedInstaller`; bridge and
-alternative app_process32_xposed files also exist. No enabled module list was
-found. None of the fixes in this session relies on Xposed. Recommend removing
-it from the finished build after documenting the runtime framework state;
-removing the installer icon alone is not a framework uninstall.
+Xposed Installer has been removed from system and userdata after repository
+receiver crashes. No enabled modules were found; normal app_process and libart
+have no Xposed dependencies in the checked runtime. None of the hardware/Home
+fixes relies on Xposed. Inactive bridge/alternative app_process files remain;
+this is not a complete framework uninstall.
 
 ## Bounded camera diagnostics (D40–D42)
 
@@ -310,3 +314,20 @@ The original system snapshot is preserved read-only. A separate package copy
 needed only the inode-bitmap padding repair from e2fsck; a second read-only fsck
 passed. ZIP member CRCs were checked and a SHA256SUMS/manifest included. Use
 `build/package_checkpoint.py` to reproduce packaging; it never flashes.
+
+## Latest application/media checkpoint
+
+`out/Q5-Mint-Lithium7-D42-R3-appfix-development-20261126.zip` supersedes both
+earlier November 26 archives. SHA-256:
+`e5ad6761e7404264536e02ef543f41a937916dffc24b8e8add5a497949d7a89a`.
+It includes the R3 boot, video compatibility/cleanup fixes, Lineage FM with its
+required HAL property, WebView 119, recorder, F7 navigation settings, branding
+and app/feature cleanup. `manifests/checkpoint-appfix-2026-11-26.json` records
+the package members and remaining checks. All 36 generated changed system
+files matched the installed device byte-for-byte after reboot.
+
+The user's short spoken recording and the requested generated test song are
+visible in Music. Recordings, account data, adopted-volume keys and other
+userdata are excluded from the checkpoint. App server sign-in, physical FM
+listening, paired Bluetooth audio and low-battery charging remain distinct
+from the automated checks. No clean-install or factory-reset pass is claimed.

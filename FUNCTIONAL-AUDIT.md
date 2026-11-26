@@ -23,18 +23,48 @@ and asked to omit the camera absent positive hardware evidence.
 * Camera, gyro and compass feature declarations pruned individually from XML,
   preserving unrelated features/permissions. The sensor HAL has only accelerometer,
   light and proximity entries; it has no gyro or compass.
-* Audio Recorder 3.5.23 added. An actual 22.56-second Ogg recording decoded
-  successfully, using BUILTIN_MIC. This proves audio capture, not intelligibility
-  or microphone calibration. Private test recordings are not published.
-* Mint FM receiver restored with isolated native libraries and a minimal vendor
-  API shim. The stock app/JNI cannot run unchanged on Nougat. See below.
+* Audio Recorder 3.5.23 added. The user recorded a spoken message and confirmed
+  recording and playback work properly. A separate speaker-to-microphone tone
+  test captured both expected frequencies while the screen was asleep. These
+  checks do not establish microphone calibration. User recordings are preserved;
+  private audit audio is not published.
+* FM receiver replaced with the Android 7 Lineage app and corrected Lithium JNI.
+  The HAL's disabled audio-patch setting was an additional silent-audio cause.
+  Nonzero tuner capture and volume-key regression pass; physical listening
+  remains to be confirmed. See [FM-BRINGUP.md](FM-BRINGUP.md).
 * 36 device-protected app folders retained obsolete UIDs from earlier installs.
   Repaired only files owned by each folder's old UID/GID, without traversing
   symlinks; credential-protected owners matched. This is a live-data repair,
   not something to bake into the system image. Audiobookshelf's blank launch
   screen disappeared afterward. Never ship a blanket recursive chown of /data.
+* Embedded WebView upgraded from 65 to the pinned Lineage ARM build
+  119.0.6045.134. With 65, Audiobookshelf's Connect button had a two-pixel height
+  and the navigation drawer collapsed. With 119, both render normally and the
+  server-address dialog opens. Server authentication awaits the user's check;
+  no credentials were entered or collected by the audit. This update adds no
+  browser launcher. Version 119 is a compatibility improvement, not a claim of
+  current Chromium security support.
 
-## FM: independent failures and evidence
+## Audiobookshelf server connection
+
+Open Audiobookshelf, tap Connect, enter the existing server's full base URL
+(including http:// or https:// and its port when needed), then Submit. Account
+sign-in follows server connection. The placeholder IP address is an example,
+not the user's server. Neither a separate browser nor Xposed is needed.
+
+The APK is currently a userdata test install, not bundled in the system image.
+The embedded WebView is a system component shared with other apps. Its source
+commit, LFS object, size and SHA-256 are pinned in `manifests/webview.json`;
+`build/fetch_webview.py` verifies the source pointer and downloaded object.
+`apply_system_defaults.py --webview /path/to/webview.apk` verifies and installs
+that exact APK. Live Package Manager and WebViewFactory logs identify version
+119, and the corrected connection-screen layout was checked after reboot.
+
+## Historical Mint FM attempt: superseded by Lineage receiver
+
+The following records the first-stage control-path work. Its app is superseded:
+the user found a volume-key crash and no audio. See FM-BRINGUP.md for the new
+default, which also requires persist.af.audio_patch_fm=1.
 
 1. The ramdisk created /dev/fm with static major 193; the actual driver registered
    dynamic major 232. D42-R1 removes that mknod/chmod/chown block and leaves
@@ -92,16 +122,19 @@ This validates the offline transformation, not a factory-reset boot.
 | Internal and adopted storage | Independent 4 KiB fixtures wrote/read correctly after reboot; adopted UUID remained stable. Fixtures removed. Adopted-media keys live in userdata; do not erase them casually. |
 | Wi-Fi/network | Ping succeeds without the earlier jump-label panic. Java HTTPS with standard certificate validation returned HTTP 200 from example.com and letsencrypt.org. |
 | Bluetooth | Real controller enabled to ON, accepted discovery, then restored OFF. Pairing, A2DP audio, reconnect and headset buttons need a physical headset. |
-| Audiobookshelf | Normal empty-library / connect-to-server screen after UID repair. Server streaming/offline books require user server/account. |
-| Plexamp | Welcome screen renders. Account/server playback untested. |
+| Audiobookshelf | UID repair restored launch; WebView 119 fixes collapsed controls. Server-address dialog opens normally. Server sign-in/streaming/offline books await user account checks. |
+| Plexamp | Welcome and built-in email/password sign-in screens render. The browser is optional for that route. Account/server playback untested. |
 | Apple Music | Library/trial screen renders. Account playback/DRM untested. |
-| Video | H.264 1920x1080 test renders; currently uses software decoder. Sustained performance/hardware decode under investigation. |
+| Video | Hardware H.264 720p baseline/High Profile renders. 30-second run and repeated playback pass; private cleanup returns locked memory to zero. 1080p test renders through software fallback. See MEDIA-BRINGUP.md for evidence and limits. |
 | USB | D42-R2 pure MTP+ADB selected from the USB chooser survives configuration. Windows detects WPD Lithium and Android ADB simultaneously. A 4 KiB file copied PC > device > PC through Windows Shell/MTP has matching SHA-256 throughout; fixture removed. |
 | Battery/charging | Full battery, approximately 4.2V while USB-powered. Low-SOC charging, discharge lifetime and unplugged deep sleep remain unverified. |
 | Other sensors | HAL entries exist but no recent sensor samples. Physical rotation/light/proximity behavior is not proven; no speculative driver additions made. |
-| Platform | Android 7.1.2 and WebView 65 are old. These app launch tests do not establish current app/service compatibility or supported security maintenance. |
+| Platform | Android 7.1.2; embedded WebView updated to 119. These app launch tests do not establish every current service's compatibility or supported security maintenance. |
 
 No camera/browser app, app credentials, private recordings, product-page PDF,
 userdata or adopted-storage keys belong in the public checkpoint/repository.
 Clean-install/factory-reset validation is still distinct from testing updates
 on this development device.
+
+Audiobookshelf, Plexamp and Apple Music are separate userdata test installs, not
+bundled default system apps. No account credentials were entered or extracted.

@@ -48,7 +48,8 @@ def main():
     smali = a.out / 'smali'
     cp = str(a.tools / '*')
     run('java', '-cp', cp, 'org.jf.baksmali.Main', 'd', '-j', '1', '-a', '17', dex, '-o', smali)
-    for name in ['A1-mint-fm-nougat-compat.patch', 'A2-mint-fm-registration-companion.patch']:
+    for name in ['A1-mint-fm-nougat-compat.patch', 'A2-mint-fm-registration-companion.patch',
+                 'A3-mint-fm-media-stream.patch']:
         path = ROOT / 'patches/apps' / name
         run('git', 'apply', '--check', path, cwd=smali)
         run('git', 'apply', path, cwd=smali)

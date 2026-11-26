@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-26",
+  "status": "development; physical FM listening and clean-install validation outstanding",
+  "archive": "Q5-Mint-Lithium7-D42-R3-appfix-development-20261126.zip",
+  "archive_sha256": "e5ad6761e7404264536e02ef543f41a937916dffc24b8e8add5a497949d7a89a",
+  "files": {
+    "boot.img": {
+      "bytes": 16777216,
+      "sha256": "e54b023a3fd941c74d1ecf479412994cf74c595e719eb5f9f1eb9ae5cf617a44"
+    },
+    "logo.bin": {
+      "bytes": 3145728,
+      "sha256": "8dfee5d07788fdcd019d4c9963b05f6f54de0e251d2909a01b612a771eb4ac02"
+    },
+    "MT6582_Android_scatter.txt": {
+      "bytes": 7254,
+      "sha256": "1824be75040f492077d50942d964e44d17a3fea2d1e5d6f1a811cb1ba18d848e"
+    },
+    "README.txt": {
+      "bytes": 2017,
+      "sha256": "e71eb6329562d8473c99e355fe33cc83c0e10041ca53846ae1f61fc2901cd3f1"
+    },
+    "system-build.json": {
+      "bytes": 4530,
+      "sha256": "b3e9fdcaa57053a5812a677d9763f85245f5a0e4843b6ec65716dd25ad6d04a2"
+    },
+    "system.img": {
+      "bytes": 761761792,
+      "sha256": "fde1a424c5fac679d4d83d924b8231133802aed27489e48f70b15bc81431b479"
+    }
+  },
+  "live_system_changed_files_checked": 36,
+  "live_system_changed_file_mismatches": 0,
+  "physical_checks_pending": [
+    "FM station listening",
+    "Bluetooth paired audio/reconnect/headset controls",
+    "low-state-of-charge charging/discharge/unplugged deep sleep"
+  ],
+  "userdata": "Excluded. Preserve adopted-storage keys and user recordings."
+}
