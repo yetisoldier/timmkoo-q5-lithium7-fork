@@ -1,0 +1,234 @@
+# D19 — display-path guards: survive the total-LCM-miss probe path (P0, the M4 flash)
+# Spec: .specs/bob-m4-board-port.md §3.1 (D19). Task: .specs/forge-m4-task.md.
+#
+# WHY (§1/§2 of the spec): the panic window is [kernel entry … mtkfb_probe]. With a
+# cmdline LCM name the kernel's lcm_driver_list can't match (α/β/β-touch: hx8369b vs
+# LK's gc9503v names), the probe walks the miss path: DISP_SelectDevice() sets
+# lcm_drv=NULL (disp_drv.c:54/777), the autodetect either hangs in unbounded DSI
+# compare_id polls or — worst case — mtkfb_probe CONTINUES with lcm_drv==NULL into
+# DISP_Init and faults inside a pid-1 init thread (CONFIG_PANIC_TIMEOUT=5 ⇒ the
+# observed ~5 s reset-loop; logo persists because the framebuffer never installs).
+# D18 already repaired the list (both blob names compiled — byte-parity proven in
+# build/61). D19 makes the entire miss-branch SURVIVABLE and OBSERVABLE and bounds
+# the unbounded waits. It changes nothing on the healthy (name-matched) path.
+#
+# WHAT (two files in the shared video driver):
+#   1. drivers/misc/mediatek/video/mt6582/mtkfb.c — mtkfb_probe(): after the
+#      mtkfb_find_lcm_driver()/DISP_DetectDevice() block, on lcm_drv==NULL log the
+#      loud "D19: no LCM driver found" marker (plain printk(KERN_ERR), NOT debug-
+#      gated) naming the cmdline lcm name verbatim, set r=-ENODEV, init_state=0,
+#      goto cleanup. mtkfb_free_resources(fbdev=NULL, 0) is a no-op (its case 0),
+#      so the early exit is safe; probe fails cleanly, boot proceeds (dark screen,
+#      adb up) and the marker is the F1 acceptance discriminator for the
+#      st7701s-unit case (spec §4-F1, dark-but-alive).
+#   2. drivers/misc/mediatek/video/mt6582/dsi_drv.c — five bounded waits:
+#      a) _WaitForEngineNotBusy() (process-context arm, ~line 576): the timeout arm
+#         now BREAKS after one Dump+Reset instead of re-arming the 2 s
+#         wait_event_interruptible_timeout forever (bob-m3 SS1/SS4 — the live-path
+#         infinite wait inside mtkfb_probe).
+#      b) DSI_Detect_CLK_Glitch_Default(): the four timeout-free engine polls
+#         (~1606 while(BUSY); ~1619/1629 while(CMD_DONE==0) x2; ~1639
+#         STATE_DBG0 bit0) get the sibling 100 ms get_current_time_us() budget
+#         (same idiom as DSI_WaitForTE/DSI_WaitBtaTE at 1387/1419), log a
+#         "(D19: 100ms budget)" WARN and return an error on expiry.
+#         - The BUSY poll sits BEFORE DSI_BackUpCmdQ(), so its expiry arm does
+#           Reset + status-clear + return 1 (nothing acquired yet; do NOT run the
+#           restore tail over an unbacked-up queue).
+#         - The other three sit after BackUpCmdQ + INTEN{RD_RDY,CMD_DONE}=0, so
+#           their expiry path jumps to a shared fail_exit tail that runs the SAME
+#           restore statements as the success tail (status clear, interrupt enables
+#           back on, DSI_RestoreCmdQ, DSI_SetMode) and returns 1 — the
+#           engine/queue/mode state stays consistent for the next transfer.
+#         - Return 1 = the function's fail/glitch signal: callers (dsi_drv.c:446,
+#           :1565) unlock, fire DISP_DSI_CMD_DONE_INT (frame retry) or fall through
+#           with force_transfer onto the reset engine. No glitch_detect_fail_cnt
+#           bump (that counter belongs to the try_times arm).
+#
+# REACHABILITY (same nuance as the M3 draft): _WaitForEngineNotBusy's break is on
+# the LIVE boot path (every image, mtkfb_probe/DSI_set_cmdq/DSI_transfer). The four
+# glitch polls are gated by dsi_glitch_enable (default false; the only enabler in
+# this file-tree is commented out) but they sit on the LCM-name-miss autodetect
+# read path's class (dsi_drv read path residuals below) and on the day the glitch
+# gate re-opens. Bounding them converts any future wedge into a logged, bounded
+# failure with signature — never a silent freeze.
+#
+# NOT DONE (residual same-class unbounded waits, deliberately out of D19's
+# enumerated scope — bob-m3 SS6.3 listed them with line numbers; extend on Bob's
+# sign-off only): dsi_drv.c:1649 (STATE_DBG0 bit18 in the same Default loop),
+# :1819/:1901 (Parallel variant), :4043 (DSI_dcs_read_lcm_reg_v2 RACK do-while —
+# on the live name-miss autodetect read path), :4120 (packet_type retry), :3899
+# (DSI_dcs_read_lcm_reg), :323 (inside #if 0, dead).
+#
+# INHERITED LIMITATION (kept byte-for-byte in the sibling idiom): the 100 ms budget
+# uses get_current_time_us() (do_gettimeofday, tv_sec&0xFFF, 32-bit long) exactly
+# like the sibling waits; a poll straddling the ~4096 s wrap can miss its own
+# expiry. A 64-bit sched_clock() budget is the cleaner follow-up if Bob wants it.
+#
+# BUILD_UBOOT note: there get_current_time_us() returns 0 (dsi_drv.c:179) so the
+# bound degrades to the old unbounded spin (no regression; only glue differs there).
+#
+# Parity gates: no new string surface (the "(D19: …)" strings only appear on the
+# error arm); re-runs of the per-tag MUST/MUST-NOT string sets (build/55/62) stay
+# green. mtkfb.o/dsi_drv.o must still build with zero new warnings.
+---
+
+--- a/drivers/misc/mediatek/video/mt6582/dsi_drv.c
++++ b/drivers/misc/mediatek/video/mt6582/dsi_drv.c
+@@ -583,6 +583,13 @@
+ 				DSI_DumpRegisters();
+ 				DSI_Reset();
+ 				//dsiTeEnable = false;
++				/* D19: leave the loop on timeout. The old arm re-armed the same
++				 * wait_event_interruptible_timeout(WAIT_TIMEOUT) endlessly whenever
++				 * BUSY||CMD_DONE never cleared -- an infinite 2 s-cadence wait
++				 * inside mtkfb_probe (bob-m3 SS1/SS4). Dump+Reset above is the one
++				 * bounded recovery try; the caller proceeds and the failure becomes
++				 * diagnosable instead of silently freezing the boot. */
++				break;
+             }
+         }
+     }
+@@ -1598,12 +1605,29 @@
+ 	int read_timeout_cnt=10000;
+ 	int read_timeout_ret = 0;
+     unsigned long long start_time,end_time;
++	long int poll_start;    /* D19: start of each bounded poll below */
+ 
+ 	if(glitch_detect_fail_cnt>2){
+ 		return 0;
+ 	}
+ 
+-	while(DSI_REG->DSI_INTSTA.BUSY);
++	/* D19: this poll had no timeout. The sibling waits in this file
++	 * (DSI_WaitForTE / DSI_WaitBtaTE, 1387/1419) budget 100 ms and warn; mirror
++	 * them. At this point nothing has been backed up or disabled yet, so the
++	 * recovery is Reset + status clear + error return (caller treats 1 as
++	 * glitch-detected and either skips the frame via the done-callback or
++	 * continues with force_transfer on the reset engine). */
++	poll_start = get_current_time_us();
++	while(DSI_REG->DSI_INTSTA.BUSY)
++	{
++		if(get_current_time_us() - poll_start > 100*1000)
++		{
++			DISP_LOG_PRINT(ANDROID_LOG_WARN, "DSI", " Wait for DSI engine BUSY timeout (D19: 100ms budget)!!!\n");
++			DSI_Reset();
++			OUTREG32(&DSI_REG->DSI_INTSTA, 0x0);
++			return 1;
++		}
++	}
+ 	OUTREG32(&DSI_REG->DSI_INTSTA, 0x0);
+ 
+ 	DSI_BackUpCmdQ();
+@@ -1616,7 +1640,20 @@
+ 
+ 	OUTREGBIT(DSI_START_REG,DSI_REG->DSI_START,DSI_START,0);
+ 	OUTREGBIT(DSI_START_REG,DSI_REG->DSI_START,DSI_START,1);
+-	while(DSI_REG->DSI_INTSTA.CMD_DONE == 0);
++	/* D19: bounded (was unbounded). Everything below runs with the command
++	 * queue backed up and RD_RDY/CMD_DONE interrupts disabled, so expiry must
++	 * restore that state before returning -- hence the shared fail_exit tail,
++	 * not a bare return. */
++	poll_start = get_current_time_us();
++	while(DSI_REG->DSI_INTSTA.CMD_DONE == 0)
++	{
++		if(get_current_time_us() - poll_start > 100*1000)
++		{
++			DISP_LOG_PRINT(ANDROID_LOG_WARN, "DSI", " Wait for CMD_DONE timeout (D19: 100ms budget)!!!\n");
++			DSI_Reset();
++			goto fail_exit;
++		}
++	}
+ 	OUTREGBIT(DSI_INT_STATUS_REG,DSI_REG->DSI_INTSTA,CMD_DONE,0);
+ 
+ 	MMProfileLogEx(MTKFB_MMP_Events.Debug, MMProfileFlagPulse, 0, 0);
+@@ -1626,7 +1663,16 @@
+ 
+ 	OUTREGBIT(DSI_START_REG,DSI_REG->DSI_START,DSI_START,0);
+ 	OUTREGBIT(DSI_START_REG,DSI_REG->DSI_START,DSI_START,1);
+-	while(DSI_REG->DSI_INTSTA.CMD_DONE == 0);
++	poll_start = get_current_time_us();
++	while(DSI_REG->DSI_INTSTA.CMD_DONE == 0)
++	{
++		if(get_current_time_us() - poll_start > 100*1000)
++		{
++			DISP_LOG_PRINT(ANDROID_LOG_WARN, "DSI", " Wait for CMD_DONE timeout (D19: 100ms budget)!!!\n");
++			DSI_Reset();
++			goto fail_exit;
++		}
++	}
+ 	OUTREGBIT(DSI_INT_STATUS_REG,DSI_REG->DSI_INTSTA,CMD_DONE,0);
+  #endif
+ 	for(i=0;i<try_times;i++)
+@@ -1636,7 +1682,17 @@
+ 		DSI_clk_HS_mode(0);
+ 
+     	MMProfileLogEx(MTKFB_MMP_Events.Debug, MMProfileFlagPulse, 0, 9);
+-		while((INREG32(&DSI_REG->DSI_STATE_DBG0)&0x1) == 0);	 // polling bit0
++		/* D19: bounded (was unbounded). */
++		poll_start = get_current_time_us();
++		while((INREG32(&DSI_REG->DSI_STATE_DBG0)&0x1) == 0)	 // polling bit0
++		{
++			if(get_current_time_us() - poll_start > 100*1000)
++			{
++				DISP_LOG_PRINT(ANDROID_LOG_WARN, "DSI", " Wait for LCM engine ready timeout (D19: 100ms budget)!!!\n");
++				DSI_Reset();
++				goto fail_exit;
++			}
++		}
+ 
+ 		OUTREGBIT(DSI_COM_CTRL_REG,DSI_REG->DSI_COM_CTRL,DSI_RESET,0);
+ 		OUTREGBIT(DSI_COM_CTRL_REG,DSI_REG->DSI_COM_CTRL,DSI_RESET,1);//reset
+@@ -1800,6 +1856,20 @@
+ #endif
+ 	glitch_detect_fail_cnt = 0;
+ 	return 0;
++
++fail_exit:  /* D19: bounded-failure exit for the CMD_DONE/bit0 polls above.
++	         * Undo exactly what the entry path did after the BUSY poll cleared:
++	         * status clear, RD_RDY/CMD_DONE interrupt enables back on, command
++	         * queue restored, operating mode restored -- the same tail the
++	         * success path runs (same statement order), so the next transfer
++	         * starts from a consistent engine. Return 1 (the function's
++	         * fail/glitch signal; never counted into glitch_detect_fail_cnt). */
++	OUTREG32(&DSI_REG->DSI_INTSTA, 0x0);
++	OUTREGBIT(DSI_INT_ENABLE_REG,DSI_REG->DSI_INTEN,RD_RDY,1);
++	OUTREGBIT(DSI_INT_ENABLE_REG,DSI_REG->DSI_INTEN,CMD_DONE,1);
++	DSI_RestoreCmdQ();
++	DSI_SetMode(lcm_params->dsi.mode);
++	return 1;
+ }
+ 
+ static unsigned int DSI_Detect_CLK_Glitch_Parallel(void)
+
+--- a/drivers/misc/mediatek/video/mt6582/mtkfb.c
++++ b/drivers/misc/mediatek/video/mt6582/mtkfb.c
+@@ -2819,6 +2819,29 @@
+         }
+     }
+ 
++    /* D19 (bob-m4 §3.1): a TOTAL LCM miss must not reach DISP_Init(). Both the
++     * cmdline-name parse and the compare_id autodetect left the global
++     * lcm_drv (disp_drv.c:54) NULL; the vendor flow continued anyway and the
++     * probe faulted inside the pid-1 init thread (CONFIG_PANIC_TIMEOUT=5 =>
++     * the observed ~5 s reset-loop with the logo frozen). Bail out instead:
++     * probe fails cleanly with -ENODEV, the kernel keeps booting (dark
++     * screen, adb up), and the marker below names the miss verbatim. On the
++     * healthy path (a name matched -- D18's gc9503v pair) this branch is not
++     * taken. mtkfb_free_resources(fbdev=NULL, 0) is a no-op (its case 0). */
++    {
++        extern LCM_DRIVER *lcm_drv;    /* disp_drv.c global; same idiom as disp_drv_dsi.c:24 */
++
++        if (lcm_drv == NULL)
++        {
++            printk(KERN_ERR "[mtkfb] D19: no LCM driver found after cmdline parse + autodetect "
++                   "(cmdline lcm name: '%s') -- mtkfb_probe aborts with -ENODEV\n",
++                   mtkfb_lcm_name[0] ? mtkfb_lcm_name : "<none>");
++            r = -ENODEV;
++            init_state = 0;
++            goto cleanup;
++        }
++    }
++
+ #ifdef MTKFB_FPGA_ONLY
+     is_lcm_inited = FALSE;
+ #endif
