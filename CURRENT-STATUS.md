@@ -105,6 +105,18 @@ making the entire kernel text writable.
   sensor list and unsuccessful probes, camera hardware is **unconfirmed**.
   Do not label an advertised/previously working camera as regressed, and do
   not identify the opening as a microphone, LED or dummy lens without evidence.
+- The user then supplied a 19-page PDF print of that exact purchase page
+  (`q5add.pdf`, printed November 26, 2026). Visual review of page 2 confirms
+  an October 19 mint-green review, marked "Review for this item", explicitly
+  says "no camera". The page also warns that reviews can be aggregated across
+  sellers/similar items, so this is corroboration rather than proof of this
+  individual unit's internals. Page 3's specifications list a Photo Viewer,
+  Voice Recorder and video playback, with no camera feature. Product images
+  on pages 4–15 do not advertise camera capture. A camera is therefore **likely
+  not fitted**, and it should no longer be treated as a confirmed firmware
+  regression or assumed release blocker. Reopen capture bring-up only with
+  positive camera hardware/operation evidence. The PDF remains local because
+  the print includes account/header information; it is not committed.
 - Mint is the user's only known-good overall firmware. Its local reference is
   Sendew/TIMMKOO-Q5-Mint-Custom-ROM v1.0, not verified OEM firmware.
 - **Hyn_device is Hynitron CST touch**, registered by `cst2xx_ts_init` at
