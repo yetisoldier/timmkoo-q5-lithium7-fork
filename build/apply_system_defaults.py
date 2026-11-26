@@ -30,7 +30,10 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     for arg in ['input', 'out', 'branding', 'gestures', 'fm', 'recorder', 'media', 'webview']:
         p.add_argument('--' + arg, required=True, type=Path)
+    p.add_argument('--release-version', help='Official Q5 Gen 7 semantic version')
     a = p.parse_args()
+    if a.release_version:
+        assert re.fullmatch(r'\d+\.\d+\.\d+', a.release_version)
     assert not a.out.exists(), 'Output already exists'
     assert a.input.resolve() != a.out.resolve()
     assert sha(a.recorder) == RECORDER, 'Unexpected Audio Recorder APK'
@@ -161,6 +164,25 @@ def main():
         assert len(re.findall(pattern, data)) <= 1
         data = (re.sub(pattern, key + '=1', data) if re.search(pattern, data)
                 else data.rstrip('\n') + '\n' + key + '=1\n')
+        if a.release_version:
+            properties = {
+                'ro.build.display.id': 'Q5 Gen 7 Lithium 7 v' + a.release_version,
+                'ro.build.version.incremental': 'q5gen7.' + a.release_version,
+                'ro.product.model': 'Q5 Gen 7',
+                'ro.modversion': 'Q5 Gen 7 Lithium 7 v' + a.release_version,
+            }
+            for key, value in properties.items():
+                pattern = r'(?m)^' + re.escape(key) + r'=.*$'
+                assert len(re.findall(pattern, data)) == 1, key
+                data = re.sub(pattern, key + '=' + value, data)
+            release = tmp / 'q5-release.json'
+            release.write_text(json.dumps({
+                'name': 'Lithium 7 for Q5 Gen 7 (Q5 Mint)',
+                'version': a.release_version, 'source_ref': 'v' + a.release_version,
+                'hardware': 'Mint-style MT6582, 480x800, single front Home circle',
+                'android': '7.1.2', 'kernel_profile': 'D42-R3',
+            }, indent=2) + '\n', encoding='utf-8')
+            put(release, '/etc/q5-release.json')
         prop.write_text(data)
         put(prop, '/build.prop')
         hal.unlink()
@@ -172,7 +194,8 @@ def main():
     subprocess.run(['e2fsck', '-f', '-n', str(a.out)], check=True)
     manifest = {'input_sha256': sha(a.input), 'output_sha256': sha(a.out),
                 'audio_hal_sha256': HAL, 'changes': changes,
-                'note': 'Development image; camera omitted per product evidence. See CURRENT-STATUS.md for validation limits.'}
+                'release_version': a.release_version,
+                'note': 'Q5 Gen 7 / Q5 Mint only. Camera omitted per product evidence; see release notes for validation limits.'}
     a.out.with_suffix('.json').write_text(json.dumps(manifest, indent=2) + '\n')
     print(json.dumps(manifest, indent=2))
 

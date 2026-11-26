@@ -15,6 +15,8 @@ import struct
 import gzip
 from patch_fm_boot_node import entries
 
+ROOT = Path(__file__).resolve().parents[1]
+
 LAYOUT = {
     'BOOTIMG': ('boot.img', 0x3180000, 0x1d80000, 0x1000000),
     'LOGO': ('logo.bin', 0x5800000, 0x4400000, 0x300000),
@@ -29,6 +31,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     for name in ['boot', 'system', 'logo', 'scatter', 'out']:
         p.add_argument('--' + name, type=Path, required=True)
+    p.add_argument('--release-version', help='Package a named official release')
     a = p.parse_args()
     assert a.boot.stat().st_size == 0x1000000
     assert a.logo.stat().st_size == 0x300000
@@ -52,6 +55,10 @@ def main():
     system_manifest_path = a.system.with_suffix('.json')
     system_manifest = json.loads(system_manifest_path.read_text())
     assert system_manifest['output_sha256'] == sha(a.system), 'System differs from its defaults-build manifest'
+    if a.release_version:
+        assert re.fullmatch(r'\d+\.\d+\.\d+', a.release_version)
+        assert system_manifest['release_version'] == a.release_version
+        assert '/etc/q5-release.json' in system_manifest['changes']
     for required in ['/etc/q5-codec-limits.sh', '/lib/libq5.so',
                      '/lib/libvcodec_utility.so', '/etc/media_codecs.xml',
                      '/priv-app/CMParts/CMParts.apk',
@@ -118,15 +125,25 @@ Source and detailed limits:
 https://github.com/yetisoldier/timmkoo-q5-lithium7-fork
 See CURRENT-STATUS.md on the codex/q5-hardware-bringup branch.
 ''')
-    files = sorted(p for p in a.out.iterdir() if p.is_file())
-    manifest = {p.name: {'bytes': p.stat().st_size, 'sha256': sha(p)} for p in files}
+    if a.release_version:
+        guide = (ROOT / 'docs/INSTALL.md').read_text(encoding='utf-8')
+        (a.out / 'README.txt').write_text(
+            'Lithium 7 for Q5 Gen 7 (Q5 Mint) v' + a.release_version + '\n\n' + guide,
+            encoding='utf-8')
+        shutil.copyfile(ROOT / 'README.md', a.out / 'README.md')
+        shutil.copyfile(ROOT / 'THIRD-PARTY-NOTICES.md', a.out / 'THIRD-PARTY-NOTICES.md')
+        shutil.copyfile(ROOT / 'build/install_adb_recovery.py', a.out / 'install-adb-recovery.py')
+        shutil.copytree(ROOT / 'docs', a.out / 'docs')
+    files = sorted(p for p in a.out.rglob('*') if p.is_file())
+    manifest = {p.relative_to(a.out).as_posix(): {'bytes': p.stat().st_size, 'sha256': sha(p)} for p in files}
     (a.out / 'SHA256SUMS').write_text(''.join(f'{v["sha256"]}  {k}\n' for k, v in manifest.items()))
     (a.out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
-    archive = a.out.with_suffix('.zip')
+    archive = Path(str(a.out) + '.zip')
     assert not archive.exists()
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-        for path in sorted(a.out.iterdir()):
-            z.write(path, path.name)
+        for path in sorted(a.out.rglob('*')):
+            if path.is_file():
+                z.write(path, path.relative_to(a.out).as_posix())
     with zipfile.ZipFile(archive) as z:
         assert z.testzip() is None
     archive.with_suffix('.zip.sha256').write_text(sha(archive) + '  ' + archive.name + '\n')
