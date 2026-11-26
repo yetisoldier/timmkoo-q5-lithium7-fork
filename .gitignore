@@ -21,3 +21,7 @@ donors/
 __pycache__/
 *.pyc
 .venv/
+
+# Local signing material
+*.jks
+*.keystore

@@ -2,19 +2,22 @@
 """Apply verified Q5 defaults to a COPY of a raw Lithium ext4 system image.
 
 Linux/WSL tools: debugfs, e2fsck. No mounting or device flashing. Pass branding
-and Home framework build output directories plus the pinned Open Camera APK.
+and Home framework build output directories, built Mint FM and pinned recorder.
 This deliberately preserves the original Lithium audio HAL, not M1a's donor HAL.
 """
 import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
+import zipfile
+from prune_features import prune
 
 HAL = 'a7cc2dbe2cc2b8fd9c06d86f6f9479670a16e66bacc8941660ac81d6a370463e'
-CAMERA = 'ca5672ca8c7174554ca0b07b5b26e505817a05142f571cf2abe67e790c30249c'
+RECORDER = 'eba0e28fe6d502c919218912f077407eef952dc39d8df431df31a28683739cc5'
 
 def sha(path):
     h = hashlib.sha256()
@@ -25,12 +28,14 @@ def sha(path):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    for arg in ['input', 'out', 'branding', 'gestures', 'camera']:
+    for arg in ['input', 'out', 'branding', 'gestures', 'fm', 'recorder']:
         p.add_argument('--' + arg, required=True, type=Path)
     a = p.parse_args()
     assert not a.out.exists(), 'Output already exists'
     assert a.input.resolve() != a.out.resolve()
-    assert sha(a.camera) == CAMERA, 'Unexpected Open Camera APK'
+    assert sha(a.recorder) == RECORDER, 'Unexpected Audio Recorder APK'
+    fm_manifest = json.loads((a.fm.parent / 'fm-build-manifest.json').read_text())
+    assert sha(a.fm) == fm_manifest['sha256'], 'FM build does not match its manifest'
     a.out.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(a.input, a.out)
     changes = {}
@@ -69,8 +74,9 @@ def main():
         hal = tmp / 'hal.so'
         extract('/lib/hw/audio.primary.mt6582.so', hal)
         assert sha(hal) == HAL, 'Expected tested original Lithium audio HAL'
-        for name in ['Jelly', 'HTMLViewer']:
-            apk, directory = f'/app/{name}/{name}.apk', f'/app/{name}'
+        for base, name in [('app', 'Jelly'), ('app', 'HTMLViewer'),
+                           ('app', 'OpenCamera'), ('priv-app', 'XposedInstaller')]:
+            apk, directory = f'/{base}/{name}/{name}.apk', f'/{base}/{name}'
             if exists(apk):
                 debug('rm ' + apk)
             if exists(directory):
@@ -87,11 +93,37 @@ def main():
             (a.gestures / 'Lawnchair.apk', '/priv-app/Lawnchair/Lawnchair.apk'),
         ]:
             put(local, remote)
-        directory = '/app/OpenCamera'
-        if not exists(directory):
-            debug('mkdir ' + directory)
-        label(directory, directory=True)
-        put(a.camera, directory + '/OpenCamera.apk')
+        def mkdir(directory):
+            if not exists(directory):
+                debug('mkdir ' + directory)
+            label(directory, directory=True)
+        for apk, directory, filename in [
+            (a.fm, '/priv-app/Q5FMRadio', 'Q5FMRadio.apk'),
+            (a.recorder, '/app/Q5AudioRecorder', 'Q5AudioRecorder.apk'),
+        ]:
+            mkdir(directory)
+            put(apk, directory + '/' + filename)
+            mkdir(directory + '/lib')
+            mkdir(directory + '/lib/arm')
+            with zipfile.ZipFile(apk) as z:
+                libraries = [n for n in z.namelist() if n.startswith('lib/armeabi-v7a/') and n.endswith('.so')]
+                assert libraries, 'Expected ARMv7 native libraries'
+                for name in libraries:
+                    native = tmp / Path(name).name
+                    native.write_bytes(z.read(name))
+                    put(native, directory + '/lib/arm/' + native.name)
+            unused = directory + '/lib/arm/libfmjni.so'
+            if directory.endswith('Q5FMRadio') and exists(unused):
+                debug('rm ' + unused)
+        listing = debug('ls -p /etc/permissions')
+        for name in sorted(set(re.findall(r'/([^/\n]+\.xml)/', listing))):
+            local = tmp / name
+            remote = '/etc/permissions/' + name
+            extract(remote, local)
+            data, removed = prune(local.read_bytes())
+            if removed:
+                local.write_bytes(data)
+                put(local, remote)
         prop = tmp / 'build.prop'
         extract('/build.prop', prop)
         lines = [s for s in prop.read_text().splitlines() if not s.startswith('qemu.hw.mainkeys=')]
@@ -106,7 +138,7 @@ def main():
     subprocess.run(['e2fsck', '-f', '-n', str(a.out)], check=True)
     manifest = {'input_sha256': sha(a.input), 'output_sha256': sha(a.out),
                 'audio_hal_sha256': HAL, 'changes': changes,
-                'note': 'Development image; camera capture still unresolved.'}
+                'note': 'Development image; camera omitted per product evidence. See CURRENT-STATUS.md for validation limits.'}
     a.out.with_suffix('.json').write_text(json.dumps(manifest, indent=2) + '\n')
     print(json.dumps(manifest, indent=2))
 

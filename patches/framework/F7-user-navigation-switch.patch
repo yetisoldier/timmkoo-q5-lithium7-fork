@@ -1,0 +1,61 @@
+--- a/org/cyanogenmod/cmparts/input/ButtonSettings.smali
++++ b/org/cyanogenmod/cmparts/input/ButtonSettings.smali
+@@ -481,7 +481,7 @@
+     if-eqz v4, :cond_4f
+ 
+     .line 630
+-    if-eqz p1, :cond_71
++    goto :cond_71
+ 
+     move v7, v8
+ 
+@@ -579,7 +579,7 @@
+     .registers 5
+ 
+     .prologue
+-    const/4 v3, 0x0
++    const/4 v3, 0x1
+ 
+     .line 598
+     invoke-virtual {p0}, Lorg/cyanogenmod/cmparts/input/ButtonSettings;->getActivity()Landroid/app/Activity;
+@@ -1060,6 +1060,8 @@
+ 
+     iput-object v0, v1, Lorg/cyanogenmod/cmparts/input/ButtonSettings;->mDisableNavigationKeys:Landroid/support/v14/preference/SwitchPreference;
+ 
++    invoke-direct/range {p0 .. p0}, Lorg/cyanogenmod/cmparts/input/ButtonSettings;->q5NavigationSwitchLabels()V
++
+     .line 218
+     invoke-virtual/range {p0 .. p0}, Lorg/cyanogenmod/cmparts/input/ButtonSettings;->getActivity()Landroid/app/Activity;
+ 
+@@ -1084,6 +1086,8 @@
+     invoke-virtual {v0, v1}, Lcyanogenmod/hardware/CMHardwareManager;->isSupported(I)Z
+ 
+     move-result v46
++
++    const/16 v46, 0x1
+ 
+     if-eqz v46, :cond_558
+ 
+@@ -1100,6 +1104,8 @@
+     .catch Landroid/os/RemoteException; {:try_start_164 .. :try_end_16b} :catch_5d7
+ 
+     move-result v30
++
++    const/16 v30, 0x0
+ 
+     .line 230
+     .end local v30    # "needsNavigationBar":Z
+@@ -2977,3 +2983,13 @@
+     :done
+     return-void
+ .end method
++
++.method private q5NavigationSwitchLabels()V
++    .locals 2
++    iget-object v0, p0, Lorg/cyanogenmod/cmparts/input/ButtonSettings;->mDisableNavigationKeys:Landroid/support/v14/preference/SwitchPreference;
++    const-string v1, "Show navigation buttons"
++    invoke-virtual {v0, v1}, Landroid/support/v14/preference/SwitchPreference;->setTitle(Ljava/lang/CharSequence;)V
++    const-string v1, "Show Back, Home and Recent Apps on screen. Physical Home shortcuts stay available."
++    invoke-virtual {v0, v1}, Landroid/support/v14/preference/SwitchPreference;->setSummary(Ljava/lang/CharSequence;)V
++    return-void
++.end method

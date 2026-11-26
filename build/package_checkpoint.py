@@ -11,6 +11,9 @@ from pathlib import Path
 import re
 import shutil
 import zipfile
+import struct
+import gzip
+from patch_fm_boot_node import entries
 
 LAYOUT = {
     'BOOTIMG': ('boot.img', 0x3180000, 0x1d80000, 0x1000000),
@@ -32,6 +35,16 @@ def main():
     assert a.system.stat().st_size <= 0x33400000
     with a.boot.open('rb') as f:
         assert f.read(8) == b'ANDROID!'
+    boot = a.boot.read_bytes()
+    _, ksz, _, rsz, _, _, _, _, page, _, _ = struct.unpack_from('<8s10I', boot)
+    roff = page + (ksz + page - 1) // page * page
+    ramdisk = gzip.decompress(boot[roff + 512:roff + rsz])
+    init = next(data for name, data, *_ in entries(ramdisk) if name.lstrip('./') == 'init.mt6582.rc')
+    assert b'mknod /dev/fm c 193' not in init, 'Apply patch_fm_boot_node.py before packaging'
+    usb = next(data for name, data, *_ in entries(ramdisk) if name.lstrip('./') == 'init.mt6582.usb.rc')
+    for mode in [b'mtp', b'mtp,adb']:
+        action = re.search(rb'(?ms)^on property:sys.usb.config=' + mode + rb'\n.*?(?=^on |\Z)', usb)
+        assert action and b'mass_storage' not in action[0], 'Apply patch_usb_boot.py before packaging'
     with a.system.open('rb') as f:
         f.seek(1080)
         assert f.read(2) == b'\x53\xef', 'Expected raw ext4 image'
@@ -60,15 +73,19 @@ def main():
     (a.out / 'MT6582_Android_scatter.txt').write_text(''.join(sections))
     (a.out / 'README.txt').write_text('''Q5 Mint / MT6582 Lithium 7 DEVELOPMENT CHECKPOINT
 
-Camera remains unresolved. This is not a fully functional release.
+Development checkpoint: see CURRENT-STATUS.md for remaining physical tests.
 Only for the specific Mint-style Q5 hardware investigated in this fork.
 Do not use on another Q5 revision, including MT6580/MT6735 devices.
 
 Known working: display/touch, physical Home, speaker and wired headphones.
-Tap Home, double-tap Back, hold Recent Apps; on-screen buttons stay visible.
+Tap Home, double-tap Back, hold Recent Apps. On-screen buttons default visible;
+change Settings > Buttons > Show navigation buttons to hide/show them.
 Gnome boot/default wallpaper. Jelly and HTMLViewer browser apps removed.
-Unused Lawnfeed update/install prompts disabled. Open Camera is included,
-but Android currently detects zero cameras. Xposed cleanup is pending.
+Unused Lawnfeed update/install prompts disabled. Open Camera and Xposed
+Installer removed. Camera omitted per purchase evidence; no fitted sensor is
+confirmed. Mint FM receiver and Audio Recorder included. USB MTP transfer fixed.
+FM needs wired
+headphones as an antenna; RF reception and Bluetooth audio need physical tests.
 
 Use SP Flash Tool DOWNLOAD ONLY with the included scatter. Only BOOTIMG,
 ANDROID and LOGO are selected. Do not enable additional partitions or choose

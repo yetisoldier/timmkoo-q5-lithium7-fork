@@ -10,7 +10,9 @@
 > The user confirmed repeated quick taps now go Home normally. D38 also fixes
 > a network-triggered kernel crash. Native Home shortcuts are installed: tap
 > Home, double-tap Back, hold Recents, with navigation visible. Browser APKs are
-> removed from system. The camera still reports zero devices; the prior Hynix
+> removed from system. Subsequent audit adds FM, a voice recorder and a
+> Settings navigation visibility switch; see [FUNCTIONAL-AUDIT.md](FUNCTIONAL-AUDIT.md).
+> Camera is omitted per purchase evidence. The prior Hynix
 > identification was incorrect (Hyn_device belongs to the touch controller). See
 > [CURRENT-STATUS.md](CURRENT-STATUS.md) for evidence, hashes and reproduction.
 >

@@ -2,12 +2,13 @@
 
 The user-confirmed working kernel is **D39**, on top of the published D33 chain.
 Touch, physical Home, speaker and headphone playback work. Native Home
-shortcuts and browser removal are installed. **Camera capture remains unresolved.**
+shortcuts and browser removal are installed. **Camera omitted per product evidence; no fitted sensor is confirmed.**
 This is a development build, not a fully functional release.
 
-The current investigative kernel is **D42**: D39 plus default-off camera
+The current installed boot is **D42-R2** (D42 kernel, corrected FM and USB ramdisk): D39 plus default-off camera
 diagnostics (D40–D42). D42 boots, passes the native Home policy regression,
-and retains navbar=0 and zero browser handlers. Keep D39 as the user-confirmed
+and retains mainkeys=0 and zero browser handlers. The Settings visibility switch
+uses secure navigation_bar_visible independently of this property. Keep D39 as the user-confirmed
 physical touch/Home/audio baseline; later physical confirmation is still useful.
 
 ## Verified on the connected 2026 Q5
@@ -19,18 +20,21 @@ physical touch/Home/audio baseline; later physical confirmation is still useful.
 | Home shortcuts | Native framework policy: single tap Home, double-tap Back (new action 13), hold Recents (action 2). Tested with injected Home key events after reboot: Sound Settings → Settings, long press → Recents, separate single tap → launcher. Physical gesture confirmation is still useful. |
 | Speaker | User heard clear playback of the original 25-second test track with D36 and the **original Lithium HAL**, at volume 5/15. |
 | Headphone/speaker switching | Headphones were tested; user reports unplugging pauses the player, and pressing Play resumes through the speaker. The app's pause must not be mistaken for routing failure. |
-| On-screen navigation | `qemu.hw.mainkeys=0` in the installed `/system/build.prop`; user confirmed the buttons are visible. This is also the existing tracked default in `patches/build.prop.patch`. |
+| On-screen navigation | Visible by default. Settings > Buttons > Show navigation buttons works, including persistence of OFF across reboot. F7 exposes the native switch without an unsupported hardware-key-disabler capability. Home assignments remain available. |
 | Gnome branding | User-supplied artwork encoded at 480×800; boot layers 0/38 replaced and other 37 logo layers verified byte-identical. Static Android boot display and all seven framework default wallpaper drawables use the same image. Home-screen screenshot verified. |
 | Browsers | Jelly and HTMLViewer APKs/directories removed from `/system`, including after reboot. No BROWSABLE https VIEW activities remain. WebView is retained for apps. This is browser removal, not comprehensive parental filtering. |
 | Network | D38 disables unsafe ARM jump labels while retaining read-only kernel text. Ping no longer crashes the kernel; repeated three-packet pings pass on D39. |
-| Storage | Stale adopted-volume UUID forgotten; internal emulated storage and `/sdcard` now mount, external public volume remains mounted. |
+| Storage | Internal emulated storage mounts. The external card is now adopted, UUID c9c65e1c-f5f0-48f2-a93d-395cbdc5f49e, and remained mounted across reboot. Preserve its key in userdata; do not format or forget it. |
 | Boot / ADB | D34–D39 booted through Android. USB ADB and root adbd work. Windows ADB server sometimes needs restarting after reboot/root. |
 | Battery | Reports 100%, approximately 4.2V, USB powered. This session does not prove charging across a low-SOC interval. |
 
-The test track is `Q5_Blue_Gnome_Speaker_Test.wav`, in `Music/` on the mounted
-public volume (`/storage/8C07-19E9` during this session), media-provider ID 56.
-It is an original synthesized instrumental, 25 seconds, PCM16 mono 44.1kHz,
-peak approximately 0.296. Generate it with `build/make_test_song.py`.
+The original synthesized 25-second test track is now in internal
+`/sdcard/Music/Q5_Blue_Gnome_Speaker_Test.wav` and scanned into the media
+provider. The older public-volume path is obsolete. Generate the song with
+`build/make_test_song.py`.
+
+See [FUNCTIONAL-AUDIT.md](FUNCTIONAL-AUDIT.md) for FM/recorder additions,
+app-data repair, navigation controls and remaining physical validation.
 
 ## Why touch was dead (D34)
 
@@ -227,11 +231,13 @@ Build default system files on an unmounted raw ext4 COPY under Linux/WSL:
 ```bash
 python3 build/apply_system_defaults.py --input /path/to/lithium-system.raw.img \
   --out out/system-defaults.img --branding out/branding \
-  --gestures out/home-gestures --camera /path/to/OpenCamera-1.56.2.apk
+  --gestures out/home-gestures --fm out/fm-nougat/FMRadio.apk \
+  --recorder /path/to/AudioRecorder-3.5.23.apk
 ```
 
-This removes Jelly/HTMLViewer, installs branding, native shortcuts and Open
-Camera, forces `qemu.hw.mainkeys=0`, preserves the hash-pinned original audio
+This removes Jelly/HTMLViewer/OpenCamera/Xposed Installer, installs branding,
+native shortcuts, Mint FM and Audio Recorder, prunes unsupported camera/gyro/compass
+feature declarations, forces `qemu.hw.mainkeys=0`, preserves the hash-pinned original audio
 HAL, applies system-file labels, and checks ext4 with e2fsck. Tested against
 the D36 system snapshot; the resulting image passes a second read-only fsck.
 The script does not flash or change userdata. Its generated image is distinct
@@ -289,15 +295,16 @@ reported rear lens. The supplied purchase listing has no camera reference
 according to the user's inspection. Further camera-specific changes need
 positive hardware identification or evidence of actual camera operation.
 
-## Local checkpoint package
+## Historical checkpoint package (superseded)
 
 `out/Q5-Mint-Lithium7-D42-development-20261126.zip` contains a full 16MiB D42
 boot image, the gnome LOGO partition, and a system snapshot with Home defaults,
 browser removal, Open Camera and the launcher prompt fix. Only BOOTIMG/ANDROID/
 LOGO are enabled in the scatter; its addresses/sizes are asserted against the
 Mint MT6582 layout. No userdata, calibration, NVRAM, recovery, bootloader or
-partition-table images are included. This archive is local, not a published
-firmware release; camera and clean-install validation remain outstanding.
+partition-table images are included. This archive predates the FM, recorder, navigation-switch and cleanup changes.
+Do not use it as the latest checkpoint. Clean-install validation remains
+outstanding.
 
 The original system snapshot is preserved read-only. A separate package copy
 needed only the inode-bitmap padding repair from e2fsck; a second read-only fsck

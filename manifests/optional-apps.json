@@ -1,13 +1,29 @@
 {
-  "camera": {
-    "package": "net.sourceforge.opencamera",
-    "name": "Open Camera",
-    "version": "1.56.2",
-    "versionCode": 96,
-    "url": "https://f-droid.org/repo/net.sourceforge.opencamera_96.apk",
-    "source": "https://f-droid.org/en/packages/net.sourceforge.opencamera/",
-    "sha256": "ca5672ca8c7174554ca0b07b5b26e505817a05142f571cf2abe67e790c30249c",
+  "fm": {
+    "package": "com.mediatek.FMRadio",
+    "name": "Mint FM Radio (Q5 Nougat compatibility build)",
+    "source": "https://github.com/Sendew/TIMMKOO-Q5-Mint-Custom-ROM",
+    "builder": "build/build_mint_fm.py",
+    "install": "/system/priv-app/Q5FMRadio",
+    "reason": "Original MT6627 receiver app with isolated JNI, current kernel ioctl sizes, and media-group permission. Receiver only; transmitter companion is registration-only."
+  },
+  "recorder": {
+    "package": "com.github.axet.audiorecorder",
+    "name": "Audio Recorder",
+    "version": "3.5.23",
+    "versionCode": 379,
+    "url": "https://f-droid.org/repo/com.github.axet.audiorecorder_379.apk",
+    "source": "https://gitlab.com/axet/android-audio-recorder",
+    "sha256": "eba0e28fe6d502c919218912f077407eef952dc39d8df431df31a28683739cc5",
     "license": "GPL-3.0-or-later",
-    "reason": "Mint bundles its camera in the legacy com.android.gallery3d package; Android rejected its target-SDK downgrade over the existing Nougat Gallery. Open Camera installs and launches independently."
-  }
+    "reason": "Mint SoundRecorder depends on missing legacy vendor APIs. This independent recorder successfully captured Ogg audio using the built-in microphone.",
+    "minSdk": 9,
+    "targetSdk": 31
+  },
+  "removed": [
+    "net.sourceforge.opencamera",
+    "de.robv.android.xposed.installer",
+    "org.lineageos.jelly",
+    "com.android.htmlviewer"
+  ]
 }

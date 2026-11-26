@@ -16,7 +16,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 INPUTS = {
     'services.jar': ('9343de13b41612570f3ac1b4ae8dd8ad35d14d93218edc5e5d7dbf744ea29e9e', ['F1-home-policy.patch']),
-    'CMParts.apk': ('2cebb14ea9e258f88db500fc5a75b243a443260c8b8a2508944f32f8850bc6ea', ['F2-home-action-enum.patch', 'F3-home-settings-ui.patch']),
+    'CMParts.apk': ('2cebb14ea9e258f88db500fc5a75b243a443260c8b8a2508944f32f8850bc6ea', ['F2-home-action-enum.patch', 'F3-home-settings-ui.patch', 'F7-user-navigation-switch.patch']),
     'org.cyanogenmod.platform.jar': ('12cb612844aacc7c605bed83205c301870c88e750d78b3f63f3205788692a496', ['F4-home-settings-validator.patch']),
     'CMSettingsProvider.apk': ('e30c540e746e0d1900f1ff4c3c10a516578f2cba47ee23033cc2ed3bb2ae8079', ['F5-home-provider-validator.patch']),
     'Lawnchair.apk': ('69c0b465dbad6b397b059d87be3a4ad579085d5a257f0f829a2ff087720d52f7', ['F6-disable-unused-lawnfeed-prompts.patch']),
