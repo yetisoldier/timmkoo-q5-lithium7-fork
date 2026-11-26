@@ -1,0 +1,16 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -861,8 +861,12 @@
+ 				GSL_LOGE("canary state read failed (%d) — default load\n", ret);
+ 				goto load_cfg;
+ 			}
+-			if ((buf[2] | (buf[3] << 8)) > 1)
++			printk(TPD_DEVICE ": D32 canary 0xb4={0x%02x%02x%02x%02x} tries_left=%d\n",
++				buf[0], buf[1], buf[2], buf[3], try_count);
++			if ((buf[2] | (buf[3] << 8)) > 1) {
++				printk(TPD_DEVICE ": D32 canary ANSWERED\n");
+ 				break;		/* canary answered */
++			}
+ 			GSL_LOGD("canary not answered, %d tries left\n", try_count);
+ 		}
+ 		if (try_count < 0) {

@@ -1,0 +1,23 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -733,6 +733,20 @@
+ 		return ret;
+ 	}
+ 
++	{
++		/* D33 diagnostic: dump alive(0xb0), fingerprint(0xb8) and canary(0xb4)
++		 * registers on every check_mem_data run, so the chip identity and firmware
++		 * state are visible without the boot-log rotation that hides the one-shot
++		 * sw_init prints. */
++		u8 fp[4] = {0};
++		u8 cn[4] = {0};
++		int rf = gsl_i2c_read_bytes(client, GSL_REG_FINGERPRINT, fp, sizeof(fp));
++		int rc = gsl_i2c_read_bytes(client, 0xb4, cn, sizeof(cn));
++		printk(TPD_DEVICE ": D33 alive(0xb0)=0x%02x%02x%02x%02x fp(0xb8)=0x%02x%02x%02x%02x canary(0xb4)=0x%02x%02x%02x%02x (ret %d/%d)\n",
++			read_buf[0], read_buf[1], read_buf[2], read_buf[3],
++			fp[0], fp[1], fp[2], fp[3], cn[0], cn[1], cn[2], cn[3], rf, rc);
++	}
++
+ 	if (read_buf[0] == GSL_FW_ALIVE_BYTE)
+ 		return 0;
+ 

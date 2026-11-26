@@ -1,0 +1,130 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -303,47 +303,62 @@
+ 
+ static int gsl_read_interface(struct i2c_client *client, u8 reg, u8 *buf, u32 num)
+ {
++	struct i2c_msg msg;
++	u8 *staged = NULL;
++	u8 settle;
+ 	int ret;
+ 
+-	/* Vendor shape (blob gsl_read_interface @0xc034c1a4): a plain single-byte
+-	 * register write, then a plain read. No ENEXT / no WRRD length packing.
+-	 * D27: ORing I2C_ENEXT_FLAG into the address routed every access into the
+-	 * controller's extended WRRD path, which demands a packed (aux<<8)|len
+-	 * length and a DMA-safe buffer. We supplied neither, so every transfer
+-	 * failed with -EFAULT before it reached the panel. */
++	/* Vendor shape (blob gsl_read_interface @0xc034c1a4): plain register write,
++	 * plain read — no ENEXT, no WRRD length packing.
++	 *
++	 * D27: our helpers ORed I2C_ENEXT_FLAG into the address, which routes the
++	 * access into the controller's extended WRRD path (it then demands a packed
++	 * (aux<<8)|len length and a DMA-safe buffer) and every transfer failed with
++	 * -EFAULT before reaching the panel.
++	 * D28: every struct i2c_msg must be ZEROED. With USE_I2C_MTK_EXT enabled the
++	 * controller reads msg->ext_flag; stack garbage can carry
++	 * I2C_3DCAMERA_FLAG(0x4), which permanently marks the adapter busy.
++	 */
+ 	if (reg < 0x80) {
+ 		/* [donor] low registers need a settle transfer before the real read */
+-		u8 settle = (u8)((reg + 8) & 0x5c);
+-		i2c_master_send(client, (const char *)&settle, 1);
++		settle = (u8)((reg + 8) & 0x5c);
++		memset(&msg, 0, sizeof(msg));
++		msg.addr = client->addr & I2C_MASK_FLAG;
++		msg.len = 1;
++		msg.flags = client->flags & I2C_M_TEN;
++		msg.buf = &settle;
++		msg.timing = 400;
++		i2c_transfer(client->adapter, &msg, 1);
+ 		usleep_range(5000, 5100);
+ 	}
+ 
+-	ret = i2c_master_send(client, (const char *)&reg, 1);
+-	if (ret < 0)
+-		return -EFAULT;
+-
+-	if (num <= 8) {
+-		ret = i2c_master_recv(client, (char *)buf, num);
+-		return (ret == (int)num) ? 0 : -EFAULT;
+-	}
+-
+-	{
+-		struct i2c_msg msg;
+-		u8 *staged = kmalloc(num, GFP_KERNEL);
+-
++	memset(&msg, 0, sizeof(msg));
++	msg.addr = client->addr & I2C_MASK_FLAG;
++	msg.len = 1;
++	msg.flags = client->flags & I2C_M_TEN;
++	msg.buf = &reg;
++	msg.timing = 400;
++	ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
++	if (ret)
++		return ret;
++
++	if (num > 8) {
++		staged = kmalloc(num, GFP_KERNEL);
+ 		if (!staged)
+ 			return -ENOMEM;
+-		msg.addr = (client->addr & I2C_MASK_FLAG) | I2C_DMA_FLAG;
+-		msg.len = num;
+-		msg.flags = I2C_M_RD | (client->flags & I2C_M_TEN);
+-		msg.buf = staged;
+-		msg.timing = 400;
+-		ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
+-		if (ret == 0)
+-			memcpy(buf, staged, num);
+-		kfree(staged);
+-		return ret;
+-	}
++	}
++
++	memset(&msg, 0, sizeof(msg));
++	msg.addr = (client->addr & I2C_MASK_FLAG) | (num > 8 ? I2C_DMA_FLAG : 0);
++	msg.len = num;
++	msg.flags = I2C_M_RD | (client->flags & I2C_M_TEN);
++	msg.buf = staged ? staged : buf;
++	msg.timing = 400;
++	ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
++	if (ret == 0 && staged)
++		memcpy(buf, staged, num);
++	kfree(staged);
++	return ret;
+ }
+ 
+ /* D22 repair (diagnosis §1): the donor helper consumed a [reg|payload] buffer
+@@ -360,26 +375,25 @@
+ {
+ 	struct i2c_msg msg;
+ 	u8 *staged;
++	u32 total = (u32)num + 1;
+ 	int ret;
+-	u32 total = (u32)num + 1;
+ 
+ 	if (!payload || num < 1 || num > GSL_I2C_MAX_PAYLOAD) {
+ 		GSL_LOGE("write_interface: bad payload (num=%u)\n", num);
+ 		return -EINVAL;
+ 	}
+ 
+-	/* Plain (non-ENEXT) transfers are limited to 8 bytes; longer bursts must
+-	 * be DMA-flagged with a physically contiguous buffer. D27 drops the ENEXT
+-	 * flag and stages the register byte with the payload. */
++	/* D27: no ENEXT (plain transfer; DMA-flagged when longer than 8 bytes).
++	 * D28: zero the message — an uninitialised ext_flag can set
++	 * I2C_3DCAMERA_FLAG and wedge the controller. */
+ 	staged = kmalloc(total, GFP_KERNEL);
+ 	if (!staged)
+ 		return -ENOMEM;
+ 	staged[0] = reg;
+ 	memcpy(&staged[1], payload, num);
+ 
+-	msg.addr = (client->addr & I2C_MASK_FLAG);
+-	if (total > 8)
+-		msg.addr |= I2C_DMA_FLAG;
++	memset(&msg, 0, sizeof(msg));
++	msg.addr = (client->addr & I2C_MASK_FLAG) | (total > 8 ? I2C_DMA_FLAG : 0);
+ 	msg.len = total;
+ 	msg.flags = client->flags & I2C_M_TEN;
+ 	msg.buf = staged;

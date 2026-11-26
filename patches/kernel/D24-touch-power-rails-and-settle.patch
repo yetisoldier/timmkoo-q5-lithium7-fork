@@ -1,0 +1,42 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -1081,13 +1081,22 @@
+ 
+ static void gsl_power_on(void)
+ {
+-	/* [BLOB probe] VIO28 @1.8 V (IO) + VGP1 @2.8 V (analog), consumer tag
+-	 * "TP".  The blob fires each rail twice with both PMIC enum spellings
+-	 * of the same regulator; powering each rail once is equivalent. */
+-	if (!hwPowerOn(TPD_POWER_SOURCE_1800, VOL_1800, TPD_POWER_USER_NAME))
++	/* [BLOB gsl_probe @0xc034e0a4…] the vendor enables FIVE rails, tag "TP",
++	 * in this order: VGP4 2.8 V, VIO28 1.8 V, VGP1 2.8 V, then the MT6323
++	 * spellings of VGP1 2.8 V and VIO28 1.8 V.  D22 only powered two of
++	 * them and never enabled VGP4 — a rail the panel needs before it will
++	 * answer on I²C.  Duplicate PMIC enum spellings are refcounted, so
++	 * requesting each once is the vendor-equivalent state. */
++	if (!hwPowerOn(MT65XX_POWER_LDO_VGP4, VOL_2800, TPD_POWER_USER_NAME))
++		GSL_LOGE("power on VGP4 2.8V failed\n");
++	if (!hwPowerOn(MT65XX_POWER_LDO_VIO28, VOL_1800, TPD_POWER_USER_NAME))
+ 		GSL_LOGE("power on VIO28 1.8V failed\n");
+-	if (!hwPowerOn(TPD_POWER_SOURCE_2800, VOL_2800, TPD_POWER_USER_NAME))
++	if (!hwPowerOn(MT65XX_POWER_LDO_VGP1, VOL_2800, TPD_POWER_USER_NAME))
+ 		GSL_LOGE("power on VGP1 2.8V failed\n");
++	if (!hwPowerOn(MT6323_POWER_LDO_VGP1, VOL_2800, TPD_POWER_USER_NAME))
++		GSL_LOGE("power on PMIC-dup VGP1 2.8V failed\n");
++	if (!hwPowerOn(MT6323_POWER_LDO_VIO28, VOL_1800, TPD_POWER_USER_NAME))
++		GSL_LOGE("power on PMIC-dup VIO28 1.8V failed\n");
+ }
+ 
+ static void gsl_gpio_init(void)
+@@ -1105,6 +1114,11 @@
+ 	mt_set_gpio_dir(GPIO_CTP_EINT_PIN, GPIO_DIR_IN);
+ 	mt_set_gpio_pull_enable(GPIO_CTP_EINT_PIN, GPIO_PULL_ENABLE);
+ 	mt_set_gpio_pull_select(GPIO_CTP_EINT_PIN, GPIO_PULL_UP);
++
++	/* [BLOB gsl_probe @0xc034e174] the vendor sleeps 100 ms here, before the
++	 * first I²C access, so the controller finishes its own power-on boot.
++	 * Without it the first read NAKs and (post-D22) aborts the probe. */
++	msleep(100);
+ }
+ 
+ static void gsl_eint_register(void)

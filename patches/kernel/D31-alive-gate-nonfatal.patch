@@ -1,0 +1,18 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -747,7 +747,14 @@
+ 
+ 	/* D22: after load/start, a bounded alive confirmation — only a
+ 	 * controller that reports the expected signature ends init. */
+-	return gsl_check_alive(client);
++	/* D31 EXPERIMENT: the vendor's check_mem_data does not gate on a post-load
++	 * alive signature; D22 added that gate. On this hardware the load path reports
++	 * success but 0xb0 still reads 0x00, so the gate may be rejecting a working
++	 * panel (or checking the wrong thing). Log it and proceed so we can observe
++	 * whether real touch events flow. */
++	if (gsl_check_alive(client) != 0)
++		GSL_LOGE("D31: alive gate did not confirm; proceeding anyway\n");
++	return 0;
+ }
+ 
+ /* D22: bounded alive check of reg 0xb0 (diagnosis §3 "bounded alive check of

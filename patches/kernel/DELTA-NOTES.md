@@ -305,3 +305,60 @@ asserts each invariant and aborts on violation. Their deltas are *selections* an
   `beta-touch-lcm-board3`. No defconfig changes. HARDWARE GATES OPEN: real
   swipe must emit event3 coordinates and work visually; BOTH volume
   directions verified by hand; no crash/regression on boot.
+
+## D25 (touch integration via the MTK tpd framework — the blob-faithful panel
+## identity, probe order, virtual buttons and sw_inited guard)
+- Task: `.specs/touch-tpd-framework-task.md` (acceptance: on our fork
+  `0-0040 -> mtk-tpd` and `/proc/bus/input/devices` lists `mtk-tpd` +
+  `mtk-tpd-kpd`); design: `.specs/bob-tpd-framework-spec.md` (§5 = the work
+  order). The panel answers the blob's driver shape, not the parallel
+  `gsl_tp`-named i2c driver D17 guessed from the id_table.
+- `patches/kernel/D25-tpd-framework-integration.patch` (applies on the
+  production chain D1…D22 D24; touches ONLY the two untracked D17 files):
+  1. i2c driver renamed `.driver.name = TPD_DEVICE` ("mtk-tpd", blob E1
+     struct decode @0xc0b74d64 → rodata @0xc0a00da0); `.id_table`
+     {gsl_tp, gsl1680, gsl915} and `.detect` kept; `force[]`/`forces[]`/
+     `.address_list` removed (blob E1 address_list NULL; the client comes
+     from the pre-registered board info).
+  2. Probe order = blob (E4/E5/E6): 5-rail power (D24) → GPIO pulse/INT/
+     100 ms (D22/D24, unchanged) → `mt_eint_mask(2)` pre-mask →
+     `gsl_await_chip()` = 5×-retried reg-0xfc reads (-1 after 5, probe
+     aborts) → guarded UNCONDITIONAL `gsl_sw_init` that SETS
+     `gsl_dev.sw_inited = 1` AT ENTRY (blob @0xc034d7e8; our port declared
+     but never set it — re-probes would have re-downloaded firmware) →
+     `msleep(20)` → `check_mem_data` (0x5a alive) → EINT registration
+     `(2, RISING, h, 1)` unchanged (unmask moved to the probe tail, after
+     `gsl_DataInit(cfg[selected])`, per E6) → thread → `tpd_load_status = 1`
+     → proc/db unchanged → DataInit → unmask → bounded log-only confirm
+     (msleep(5) + ≤4 reads of 0xfc).
+  3. Virtual buttons (E3): `tpd_have_button = 1`, keys {172, 158} =
+     {KEY_HOMEPAGE, KEY_BACK}, dims {100,900,40,40}/{300,900,40,40} via
+     `tpd_button_setting()` (const tables, explicitly cast for the
+     framework's void* parameter), `tpd_button(x, y, 1)` on the touch-down
+     branch (blob site @0xc034d4f0; no release call site in the blob).
+  4. `tpd_local_init` = blob (E2): `get_boot_mode()` store (SW_REBOOT → 0),
+     button setting, `i2c_add_driver`, and on `tpd_load_status == 0`
+     `i2c_del_driver` + -1 (D22 production semantics; the diagnostic
+     keep-driver-registered patch is NOT in this chain and its strings are
+     gated absent at source, object and Image level).
+- `build/66_kernel_delta_tpd.sh` (O dir `build-beta-touch-lcm-board6`):
+  re-asserts every D1–D24 invariant the 65 stage carried (host tests run on
+  the post-D22 snapshot; D24 before D25; no D23) and adds the D25 gates:
+  source (TPD_DEVICE name / no address_list / sw_inited set / 0xfc×5 gate
+  constants / buttons / probe-order incl. EINT pre-mask / no diagnostic
+  tokens / other compiled panels keep their own i2c names), compiled
+  (`mtk_gslX680.o` "D25:" markers + standalone "mtk-tpd" literal + key/dim
+  words, no diagnostic tokens; `vmlinux` link-order
+  `__initcall_tpd_driver_init6` < `__initcall_mt_i2c_init6` = E9; linked
+  E1-style decode: `.driver.name` pointer dereferences to "mtk-tpd", id
+  table = {gsl_tp, gsl1680, gsl915}, framework struct has gsl_tp identity +
+  have_button = 1), δ-parity (mtk-tpd > 0, `virtualkeys.mtk-tpd` present,
+  alias literals at blob parity, no D25-parity regressions, diagnostic
+  bind-hint absent) and a warning-set gate (zero new compiler warnings vs
+  the board5 baseline log).
+- `55_repack_boot.sh` tag `beta-touch-lcm-board6` →
+  `out/boot-m1b-beta-touch-lcm-board6.img(+.sha256)`.
+- HARDWARE GATES OPEN (Hera/user): `0-0040 -> mtk-tpd`, `mtk-tpd` +
+  `mtk-tpd-kpd` event nodes, physical swipe coordinates, both volume keys,
+  boot/display/charging unchanged. If the panel still NAKs: D26 diagnostic
+  image only (never ships).

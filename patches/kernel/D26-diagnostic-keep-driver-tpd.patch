@@ -1,0 +1,16 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -1318,8 +1318,11 @@
+ 	 * from the diagnostic board image is NOT in the production chain and
+ 	 * its log strings are absent by design (task step 5). */
+ 	if (tpd_load_status == 0) {
+-		i2c_del_driver(&tpd_i2c_driver);
+-		GSL_LOGE("D25: probe failed, i2c driver unregistered\n");
++		/* D26 DIAG ONLY (never ships): keep the i2c driver registered so the
++		 * probe can be re-run after boot and its logs read from the live ring:
++		 *   echo 0-0040 > /sys/bus/i2c/drivers/<name>/bind
++		 */
++		GSL_LOGE("D26 diag: probe failed, driver kept registered for rebind\n");
+ 		return -1;
+ 	}
+ 

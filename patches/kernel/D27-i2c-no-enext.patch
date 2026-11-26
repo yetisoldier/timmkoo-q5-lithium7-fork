@@ -1,0 +1,113 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -303,28 +303,47 @@
+ 
+ static int gsl_read_interface(struct i2c_client *client, u8 reg, u8 *buf, u32 num)
+ {
+-	struct i2c_msg xfer_msg[2];
+-
+-	xfer_msg[0].addr = (client->addr & I2C_MASK_FLAG) | I2C_ENEXT_FLAG;
+-	xfer_msg[0].len = 1;
+-	xfer_msg[0].flags = client->flags & I2C_M_TEN;
+-	xfer_msg[0].buf = &reg;
+-	xfer_msg[0].timing = 400;
+-
+-	xfer_msg[1].addr = (client->addr & I2C_MASK_FLAG) | I2C_ENEXT_FLAG;
+-	xfer_msg[1].len = num;
+-	xfer_msg[1].flags = I2C_M_RD | (client->flags & I2C_M_TEN);
+-	xfer_msg[1].buf = buf;
+-	xfer_msg[1].timing = 400;
+-
++	int ret;
++
++	/* Vendor shape (blob gsl_read_interface @0xc034c1a4): a plain single-byte
++	 * register write, then a plain read. No ENEXT / no WRRD length packing.
++	 * D27: ORing I2C_ENEXT_FLAG into the address routed every access into the
++	 * controller's extended WRRD path, which demands a packed (aux<<8)|len
++	 * length and a DMA-safe buffer. We supplied neither, so every transfer
++	 * failed with -EFAULT before it reached the panel. */
+ 	if (reg < 0x80) {
+ 		/* [donor] low registers need a settle transfer before the real read */
+-		i2c_transfer(client->adapter, xfer_msg, ARRAY_SIZE(xfer_msg));
++		u8 settle = (u8)((reg + 8) & 0x5c);
++		i2c_master_send(client, (const char *)&settle, 1);
+ 		usleep_range(5000, 5100);
+ 	}
+ 
+-	return i2c_transfer(client->adapter, xfer_msg, ARRAY_SIZE(xfer_msg))
+-	       == ARRAY_SIZE(xfer_msg) ? 0 : -EFAULT;
++	ret = i2c_master_send(client, (const char *)&reg, 1);
++	if (ret < 0)
++		return -EFAULT;
++
++	if (num <= 8) {
++		ret = i2c_master_recv(client, (char *)buf, num);
++		return (ret == (int)num) ? 0 : -EFAULT;
++	}
++
++	{
++		struct i2c_msg msg;
++		u8 *staged = kmalloc(num, GFP_KERNEL);
++
++		if (!staged)
++			return -ENOMEM;
++		msg.addr = (client->addr & I2C_MASK_FLAG) | I2C_DMA_FLAG;
++		msg.len = num;
++		msg.flags = I2C_M_RD | (client->flags & I2C_M_TEN);
++		msg.buf = staged;
++		msg.timing = 400;
++		ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
++		if (ret == 0)
++			memcpy(buf, staged, num);
++		kfree(staged);
++		return ret;
++	}
+ }
+ 
+ /* D22 repair (diagnosis §1): the donor helper consumed a [reg|payload] buffer
+@@ -339,24 +358,36 @@
+ static int gsl_write_interface(struct i2c_client *client, u8 reg,
+ 			       const u8 *payload, u16 num)
+ {
+-	struct i2c_msg xfer_msg[1];
+-	u8 staged[GSL_I2C_MAX_PAYLOAD + 1];
++	struct i2c_msg msg;
++	u8 *staged;
++	int ret;
++	u32 total = (u32)num + 1;
+ 
+ 	if (!payload || num < 1 || num > GSL_I2C_MAX_PAYLOAD) {
+ 		GSL_LOGE("write_interface: bad payload (num=%u)\n", num);
+ 		return -EINVAL;
+ 	}
+ 
++	/* Plain (non-ENEXT) transfers are limited to 8 bytes; longer bursts must
++	 * be DMA-flagged with a physically contiguous buffer. D27 drops the ENEXT
++	 * flag and stages the register byte with the payload. */
++	staged = kmalloc(total, GFP_KERNEL);
++	if (!staged)
++		return -ENOMEM;
+ 	staged[0] = reg;
+ 	memcpy(&staged[1], payload, num);
+ 
+-	xfer_msg[0].addr = (client->addr & I2C_MASK_FLAG) | I2C_ENEXT_FLAG;
+-	xfer_msg[0].len = num + 1;
+-	xfer_msg[0].flags = client->flags & I2C_M_TEN;
+-	xfer_msg[0].buf = staged;
+-	xfer_msg[0].timing = 400;
+-
+-	return i2c_transfer(client->adapter, xfer_msg, 1) == 1 ? 0 : -EFAULT;
++	msg.addr = (client->addr & I2C_MASK_FLAG);
++	if (total > 8)
++		msg.addr |= I2C_DMA_FLAG;
++	msg.len = total;
++	msg.flags = client->flags & I2C_M_TEN;
++	msg.buf = staged;
++	msg.timing = 400;
++
++	ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
++	kfree(staged);
++	return ret;
+ }
+ 
+ /* register read/write (donor's gsl_i2c_read/write_bytes, payload-only

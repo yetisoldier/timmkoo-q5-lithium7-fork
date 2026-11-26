@@ -1,0 +1,157 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -305,16 +305,15 @@
+ {
+ 	struct i2c_msg msg;
+ 	u8 settle;
+-	u32 done = 0;
+ 	int ret;
+ 
+-	/* D27/D28/D29: vendor-shaped, NON-DMA I/O.
+-	 *  - no I2C_ENEXT_FLAG (it selects the extended WRRD path, which demands a
+-	 *    packed (aux<<8)|len and rejects our transfers with -EINVAL_I2C);
+-	 *  - every struct i2c_msg zeroed (USE_I2C_MTK_EXT is on, so a garbage
+-	 *    ext_flag can set I2C_3DCAMERA_FLAG and wedge the adapter as busy);
+-	 *  - chunks of at most 8 bytes: the plain path caps a transfer at 8 bytes
+-	 *    and the DMA path requires a PHYSICAL buffer address.
++	/* D27/D28/D30 — vendor-shaped I/O:
++	 *  - no I2C_ENEXT_FLAG (extended WRRD path rejects our transfers);
++	 *  - every struct i2c_msg zeroed (USE_I2C_MTK_EXT is on; a garbage ext_flag
++	 *    can set I2C_3DCAMERA_FLAG and wedge the adapter as "busy");
++	 *  - <=8 bytes plain; >8 bytes DMA with a PHYSICAL buffer address, which is
++	 *    what i2c.c:810 requires. (D29's 8-byte chunking is too slow: the fw
++	 *    upload alone outran the watchdog and reset-looped the device.)
+ 	 */
+ 	if (reg < 0x80) {
+ 		settle = (u8)((reg + 8) & 0x5c);
+@@ -328,34 +327,43 @@
+ 		usleep_range(5000, 5100);
+ 	}
+ 
+-	while (done < num) {
+-		u8 cur = (u8)(reg + done);
+-		u32 left = num - done;
+-		u32 chunk = left > 8 ? 8 : left;
+-
++	memset(&msg, 0, sizeof(msg));
++	msg.addr = client->addr & I2C_MASK_FLAG;
++	msg.len = 1;
++	msg.flags = client->flags & I2C_M_TEN;
++	msg.buf = &reg;
++	msg.timing = 400;
++	ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
++	if (ret)
++		return ret;
++
++	if (num <= 8) {
+ 		memset(&msg, 0, sizeof(msg));
+ 		msg.addr = client->addr & I2C_MASK_FLAG;
+-		msg.len = 1;
+-		msg.flags = client->flags & I2C_M_TEN;
+-		msg.buf = &cur;
++		msg.len = (u16)num;
++		msg.flags = I2C_M_RD | (client->flags & I2C_M_TEN);
++		msg.buf = buf;
++		msg.timing = 400;
++		return i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
++	}
++
++	{
++		u8 *staged = kmalloc(num, GFP_KERNEL);
++
++		if (!staged)
++			return -ENOMEM;
++		memset(&msg, 0, sizeof(msg));
++		msg.addr = (client->addr & I2C_MASK_FLAG) | I2C_DMA_FLAG;
++		msg.len = (u16)num;
++		msg.flags = I2C_M_RD | (client->flags & I2C_M_TEN);
++		msg.buf = (u8 *)virt_to_phys(staged);	/* DMA needs a physical address */
+ 		msg.timing = 400;
+ 		ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
+-		if (ret)
+-			return ret;
+-
+-		memset(&msg, 0, sizeof(msg));
+-		msg.addr = client->addr & I2C_MASK_FLAG;
+-		msg.len = (u16)chunk;
+-		msg.flags = I2C_M_RD | (client->flags & I2C_M_TEN);
+-		msg.buf = buf + done;
+-		msg.timing = 400;
+-		ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
+-		if (ret)
+-			return ret;
+-
+-		done += chunk;
+-	}
+-	return 0;
++		if (ret == 0)
++			memcpy(buf, staged, num);
++		kfree(staged);
++		return ret;
++	}
+ }
+ 
+ /* D22 repair (diagnosis §1): the donor helper consumed a [reg|payload] buffer
+@@ -371,8 +379,8 @@
+ 			       const u8 *payload, u16 num)
+ {
+ 	struct i2c_msg msg;
+-	u8 staged[9];
+-	u32 done = 0;
++	u8 *staged;
++	u32 total = (u32)num + 1;
+ 	int ret;
+ 
+ 	if (!payload || num < 1 || num > GSL_I2C_MAX_PAYLOAD) {
+@@ -380,29 +388,29 @@
+ 		return -EINVAL;
+ 	}
+ 
+-	/* D27/D28/D29: plain, zeroed, NON-DMA transfers of at most 8 bytes
+-	 * (register byte + up to 7 payload bytes). */
+-	while (done < num) {
+-		u32 left = num - done;
+-		u32 chunk = left > 7 ? 7 : left;
+-
+-		staged[0] = (u8)(reg + done);
+-		memcpy(&staged[1], payload + done, chunk);
+-
+-		memset(&msg, 0, sizeof(msg));
+-		msg.addr = client->addr & I2C_MASK_FLAG;
+-		msg.len = (u16)(chunk + 1);
+-		msg.flags = client->flags & I2C_M_TEN;
++	/* D27/D28/D30: plain transfer up to 8 bytes; DMA (physical address) above.
++	 * Staging keeps the caller payload untouched and the register byte first. */
++	staged = kmalloc(total, GFP_KERNEL);
++	if (!staged)
++		return -ENOMEM;
++	staged[0] = reg;
++	memcpy(&staged[1], payload, num);
++
++	memset(&msg, 0, sizeof(msg));
++	msg.addr = client->addr & I2C_MASK_FLAG;
++	msg.len = (u16)total;
++	msg.flags = client->flags & I2C_M_TEN;
++	msg.timing = 400;
++	if (total > 8) {
++		msg.addr |= I2C_DMA_FLAG;
++		msg.buf = (u8 *)virt_to_phys(staged);
++	} else {
+ 		msg.buf = staged;
+-		msg.timing = 400;
+-
+-		ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
+-		if (ret)
+-			return ret;
+-
+-		done += chunk;
+-	}
+-	return 0;
++	}
++
++	ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
++	kfree(staged);
++	return ret;
+ }
+ 
+ /* register read/write (donor's gsl_i2c_read/write_bytes, payload-only

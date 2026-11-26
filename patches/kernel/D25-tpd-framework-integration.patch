@@ -1,0 +1,418 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -56,6 +56,70 @@
+  * Vendor behaviours preserved verbatim: delays, fingerprint selection and
+  * cascade, firmware/tuning arrays, message flags (addr mask, ENEXT, timing).
+  *
++ * D25 (bob-tpd-framework-spec §5.1) integrates the panel with the MTK tpd
++ * framework exactly the way the pinned blob does, and removes every
++ * statically known deviation from the blob's compiled driver (Bob §4.2
++ * P1–P5). All blob facts are from the symbol-aware disassembly of the
++ * pinned Lithium kernel:
++ *  1. i2c driver identity (E1): the compiled struct i2c_driver @0xc0b74d64
++ *     names the driver TPD_DEVICE — .driver.name → rodata @0xc0a00da0
++ *     "mtk-tpd". Our D17 "gsl_tp" name was an inference from the id_table;
++ *     binding is id_table-vs-client-name, but the sysfs driver link shows
++ *     driver.name, and stock exposes `0-0040 -> mtk-tpd`. Side effect
++ *     documented in Bob §6: /sys/bus/i2c/drivers/gsl_tp becomes
++ *     /sys/bus/i2c/drivers/mtk-tpd (no shipped userspace references the old
++ *     name; the diagnostic-only rebind help from the diagnostic build is
++ *     diagnostic-only and must not ship in production — it is absent here).
++ *     Exactly ONE panel driver using the mtk-tpd i2c name may be enabled at
++ *     a time — a second registration fails -EBUSY and the framework would
++ *     silently fall back (no input device).
++ *  2. probe order (E4/E5/E6) = blob gsl_probe @0xc034e048: five-rail power
++ *     (D24 bytes, unchanged) → reset pulse GPIO14 + INT GPIO2 pull-up +
++ *     100 ms settle (D22/D24, unchanged) → EINT PRE-MASK(2) before any i2c
++ *     contact → the vendor's 5×-retried reg-0xfc link gate (gsl_await_chip,
++ *     E5 shape "r4=#5 … -1 after 5 failures") → guarded UNCONDITIONAL
++ *     gsl_sw_init that now sets gsl_dev.sw_inited = 1 AT ENTRY (blob sets
++ *     it @0xc034d7e8; our port declared but never set the guard — re-probes
++ *     would have re-downloaded firmware; semantics kept blob-exact: the
++ *     flag is never cleared, also not on init failure) → msleep(20) →
++ *     check_mem_data (0x5a alive confirm; blob E6 order) → EINT registration
++ *     (2, RISING, handler, auto_umask=1) unchanged (mask→…→unmask moves to
++ *     the probe tail, after gsl_DataInit, per E6) → thread →
++ *     tpd_load_status = 1 → proc/db state (unchanged) → gsl_DataInit over
++ *     the ACTIVE config (blob part.4 tail) → mt_eint_unmask(2) → bounded
++ *     NON-FATAL confirm: msleep(5) + up to 4 reads of 4 B @0xfc, logged
++ *     only (E6 tail).
++ *  3. virtual buttons (E3): tpd_have_button = 1 with keys {172, 158} =
++ *     {KEY_HOMEPAGE, KEY_BACK} at dims {100,900,40,40}/{300,900,40,40}
++ *     (rodata @0xc0b74d3c–0xc0b74d60), registered via tpd_button_setting in
++ *     tpd_local_init so the framework's tpd_button_init() creates
++ *     "mtk-tpd-kpd" (tpd_button.c:56); the report path's touch-down branch
++ *     calls tpd_button(x, y, 1) (blob site @0xc034d4f0; the blob has NO
++ *     release-path call site — vendor-faithful is down-only).
++ *  4. tpd_local_init = blob tpd_local_init @0xc034c344 (E2): boot-mode
++ *     store (SW_REBOOT → 0), tpd_button_setting, i2c_add_driver,
++ *     then tpd_load_status == 0 ⇒ i2c_del_driver + -1 (D22 production
++ *     semantics restored; the diagnostic keep-driver-registered patch from
++ *     the diagnostic board image is absent from the production chain by
++ *     design). NO power, NO GPIO, NO board info in local_init — all of
++ *     that runs in the synchronous i2c probe inside i2c_add_driver, like
++ *     the blob. Deliberate retained deviation (Bob §3): the
++ *     ABS_MT_TRACKING_ID range set stays (the framework only sets the bit,
++ *     no range; a range protects MT-B id events).
++ *  5. the force[]/forces[]/address_list path is gone (blob E1: detect
++ *     present, address_list NULL): the client comes from the pre-registered
++ *     i2c_board_info {gsl_tp @0x40} in tpd_driver_init (E9 — module_init
++ *     registration scanned at adapter-add, __initcall_tpd_driver_init6
++ *     before __initcall_mt_i2c_init6), and the force list would only feed
++ *     the core's smbus-quick emulation against the vendor core's NULL-tolerant
++ *     message-buffer rules — dead weight at best.
++ *  Framework files (mtk_tpd.c, tpd_button.c, tpd_setting.c, tpd_default.c)
++ *  are NOT modified: the framework owns only input devices, the probe loop
++ *  and earlysuspend dispatch and never touches i2c/EINT/PMIC/GPIO (Bob §2).
++ *  Phase-A transport contract (D22 read/write helpers, bounded loader,
++ *  alive gate) is untouched per ADR-3 — wire-equivalent for every register
++ *  this flow touches (E7/E8).
++ *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License as published by
+  * the Free Software Foundation; either version 2 of the License, or
+@@ -87,6 +151,9 @@
+ #include <cust_eint.h>
+ #include <cust_gpio_usage.h>
+ #include <mach/mt_pm_ldo.h>
++/* D25 [BLOB tpd_local_init @0xc034c344, E2 step 1] get_boot_mode()/SW_REBOOT
++ * (BOOTMODE enum; the vendor stores the boot mode at local_init entry). */
++#include <mach/mt_boot_common.h>
+ 
+ extern struct tpd_device *tpd;
+ extern void mt_eint_mask(unsigned int line);
+@@ -104,9 +171,11 @@
+ #define GSL_LOGF(void)		GSL_LOGD("f:%s\n", __func__)
+ 
+ /* ---- panel identity / protocol constants (donor + blob) ---- */
+-/* NOTE: TPD_DEVICE ("mtk-tpd") comes from the shared tpd.h like every
+- * in-tree driver — the input device and misc "touch" node keep the stock
+- * name; the panel identity lives in GSLX680_NAME ("gsl_tp", blob-locked). */
++/* NOTE (D25): TPD_DEVICE ("mtk-tpd") comes from the shared tpd.h like every
++ * in-tree driver — the input device, misc "touch" node AND the i2c driver
++ * name (blob E1 struct decode @0xc0b74d64 → rodata "mtk-tpd" @0xc0a00da0)
++ * keep the stock constant; the panel identity lives in GSLX680_NAME
++ * ("gsl_tp", blob-locked: id_table[0] + i2c_board_info type). */
+ #define MAX_FINGERS		10
+ #define MAX_CONTACTS		10
+ #define DMA_TRANS_LEN		0x20		/* max fw records per page write burst */
+@@ -128,6 +197,13 @@
+ #define GSL_CONFIG_PROC_FILE	"gsl_config"
+ #define TPD_PROC_DEBUG		1		/* [BLOB] proc interface present (gsl_config strings) */
+ 
++/* D25 [BLOB gsl_test_i2c-as-gate @0xc034c2b4, E5 + probe tail E6] the vendor
++ * gates probe entry on reg 0xfc reads retried 5× and ends the probe with
++ * bounded non-fatal confirm reads of the same register. */
++#define GSL_CHIP_AWAIT_REG	0xfc		/* vendor's pre-contact link-gate register */
++#define GSL_CHIP_AWAIT_TRIES	5		/* 0xfc reads before probe aborts (E5 r4=#5) */
++#define GSL_CHIP_CONFIRM_TRIES	4		/* probe-end log-only confirm reads (E6 tail) */
++
+ #define GSL_NOID_VERSION
+ #ifdef GSL_NOID_VERSION
+ /* field order matches the donor's gsl_touch_info (and gsl_point_id.c's own
+@@ -681,6 +757,15 @@
+ 	if (gsl_dev.sw_inited)
+ 		return 0;
+ 
++	/* D25 [BLOB gsl_sw_init @0xc034d7e8, E6] sw_inited is SET AT ENTRY, not
++	 * on completion: the compiled vendor marks the init as in progress
++	 * immediately after the guard check and never clears it — a FAILED init
++	 * also leaves the flag set and a re-entry must not re-download firmware.
++	 * Our D17 port declared the guard but never set it (Bob §0: latent bug);
++	 * this is the documented semantic (do not "complete" it by clearing on
++	 * failure — that would change blob semantics). */
++	gsl_dev.sw_inited = 1;
++
+ 	/* 1. reset pulse [BLOB mt_set_gpio_out(0x8000000E, 0/1) + msleep(20)×2] */
+ 	mt_set_gpio_mode(GPIO_CTP_RST_PIN, GPIO_CTP_RST_PIN_M_GPIO);
+ 	mt_set_gpio_dir(GPIO_CTP_RST_PIN, GPIO_DIR_OUT);
+@@ -841,6 +926,14 @@
+ 		gsl_up_flag = 1;
+ 		for (tmp = 0; ti->finger_num > tmp; tmp++)
+ 			tpd_down(ti->id[tmp] - 1, ti->x[tmp], ti->y[tmp], 0);
++		/* D25 [BLOB c034d4f0] virtual keys fire on the touch-down branch
++		 * only: the blob calls tpd_button(x, y, 1) inside contact 0's
++		 * event stream (between the ABS_MT_POSITION_X and
++		 * ABS_MT_TRACKING_ID reports) and has NO release-path call site
++		 * anywhere — vendor-faithful is down-only here (the key rects
++		 * sit at y=900, outside the 480x800 panel). Contact 0 carries
++		 * the touch, so its RAW coordinates decide the key. */
++		tpd_button(ti->x[0], ti->y[0], 1);
+ 	}
+ 	input_sync(tpd->dev);
+ }
+@@ -1123,33 +1216,116 @@
+ 
+ static void gsl_eint_register(void)
+ {
+-	/* [BLOB probe] mt_eint_registration(2, flag=RISING, handler, auto=1) */
++	/* [BLOB probe] mt_eint_registration(2, flag=RISING, handler, auto=1).
++	 * D25 (E4/E6): registration ONLY — the vendor unmasks AFTER
++	 * gsl_DataInit at the probe tail (mask → … → register → … →
++	 * DataInit → unmask), so the unmask call moved to tpd_i2c_probe and
++	 * this helper's contract is "register the channel, leave the line
++	 * masked". */
+ 	mt_eint_registration(CUST_EINT_TOUCH_PANEL_NUM, TPD_EINT_FLOW,
+ 			     tpd_eint_interrupt_handler, 1);
+-	mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
++}
++
++/* D25 [BLOB 0xc034c2b4 = the vendor's pre-contact link gate, E5] up to
++ * GSL_CHIP_AWAIT_TRIES (5) reads of 4 bytes @GSL_CHIP_AWAIT_REG (0xfc):
++ * 0 on the first success, -1 after 5 failures — the caller aborts the
++ * probe. This is the FIRST chip contact (after power/GPIO/100 ms settle,
++ * with the EINT held masked): the compiled vendor rides the panel's post-
++ * power-on boot window out instead of deciding liveness from a single
++ * read. No inter-retry delay in the blob (r4=#5 loop, bgt early-out). */
++static int gsl_await_chip(struct i2c_client *client)
++{
++	u8 read_buf[4] = {0};
++	int tries = GSL_CHIP_AWAIT_TRIES;
++	int ret;
++
++	while (tries-- > 0) {
++		ret = gsl_read_interface(client, GSL_CHIP_AWAIT_REG, read_buf,
++					 sizeof(read_buf));
++		if (ret == 0)
++			return 0;
++		GSL_LOGE("D25: 0xfc gate read failed (%d), %d tries left\n",
++			 ret, tries);
++	}
++
++	GSL_LOGE("gsl_tp: chip not answering 0xfc after 5 reads\n");
++	return -1;
++}
++
++/* D25 [BLOB gsl_probe.part.4 tail @0xc034de40, E6] the vendor re-runs
++ * gsl_DataInit(cfg[selected]) at probe end (after the proc/sysfs setup,
++ * before the final unmask) — the same call gsl_start_core makes mid-init.
++ * Kept for blob parity: the /proc-gsl_config-tunable ACTIVE config's words
++ * are applied exactly once more at bring-up, like stock. */
++static void gsl_data_init_selected(void)
++{
++#ifdef GSL_NOID_VERSION
++	gsl_DataInit(gsl_cfg_data());
++#endif
+ }
+ 
+ /* ------------------------------------------------------------------ */
+ /* tpd driver glue                                                     */
+ /* ------------------------------------------------------------------ */
+ 
++/* D25 [BLOB E3: rodata 0xc0b74d3c–0xc0b74d60] the Q5's virtual buttons:
++ * keys {172, 158} = {KEY_HOMEPAGE, KEY_BACK} at dims [x, y, width, height]
++ * = {100,900,40,40} / {300,900,40,40}. tpd_local_init hands these to the
++ * framework via tpd_button_setting(); because this driver sets
++ * tpd_have_button = 1, the framework's tpd_button_init() registers the
++ * second input device "mtk-tpd-kpd" (tpd_button.c:56). */
++#define TPD_HAVE_BUTTON 1	/* local: enables the blob's button glue */
++static const int gsl_tp_keys[2] = { 172 /* KEY_HOMEPAGE */, 158 /* KEY_BACK */ };
++static const int gsl_tp_keys_dim[2][4] = {
++	{ 100, 900, 40, 40 },
++	{ 300, 900, 40, 40 },
++};
++
++/* D25 [BLOB tpd_local_init @0xc034c344, E2] the framework's per-panel hook:
++ * boot-mode store → tpd_button_setting → i2c_add_driver (this synchronously
++ * runs tpd_i2c_probe for the pre-registered 0-0040 client — the whole panel
++ * bring-up happens inside this call, exactly like the blob) →
++ * tpd_load_status check. NO power, NO GPIO, NO board info here — the blob
++ * has none (E2) and the probe owns all of it. */
++static int gsl_bootmode;	/* D25 blob parity (E2 step 1) */
++
+ static int tpd_local_init(void)
+ {
+ 	GSL_LOGF();
+ 
+-	gsl_power_on();
+-
++	/* E2 step 1: store the boot mode (= 0 for SW_REBOOT) */
++	gsl_bootmode = get_boot_mode();
++	if (gsl_bootmode == SW_REBOOT)
++		gsl_bootmode = 0;
++
++	/* E2 step 2: hand the virtual keys to the framework. Explicit casts:
++	 * tpd_button_setting(int, void*, void*) only memcpy()s from the tables
++	 * (tpd_button.c:108), so const is dropped by contract here — the tables
++	 * stay const and land in rodata like the blob's. */
++	tpd_button_setting(ARRAY_SIZE(gsl_tp_keys),
++			   (void *)gsl_tp_keys, (void *)gsl_tp_keys_dim);
++
++	/* E2 step 3: the sysfs-visible i2c driver name is TPD_DEVICE ("mtk-tpd",
++	 * blob E1); binding of the pre-created gsl_tp@0x40 client is by
++	 * id_table vs client name (Bob §2.5) */
+ 	if (i2c_add_driver(&tpd_i2c_driver) != 0) {
+-		GSL_LOGE("unable to add i2c driver.\n");
++		GSL_LOGE("D25: add i2c driver failed\n");
+ 		return -1;
+ 	}
+ 
++	/* E2 steps 4-5: production gate — probe failed ⇒ unregister + fail.
++	 * D22 semantics restored; the diagnostic keep-driver-registered patch
++	 * from the diagnostic board image is NOT in the production chain and
++	 * its log strings are absent by design (task step 5). */
+ 	if (tpd_load_status == 0) {
+-		GSL_LOGE("add error touch panel driver.\n");
+ 		i2c_del_driver(&tpd_i2c_driver);
++		GSL_LOGE("D25: probe failed, i2c driver unregistered\n");
+ 		return -1;
+ 	}
+ 
++	/* deliberate retained deviation (Bob §3): the framework only sets the
++	 * ABS_MT_TRACKING_ID bit without a range; keeping our range set
++	 * protects MT-B id events. Harmless vs the blob. */
+ 	input_set_abs_params(tpd->dev, ABS_MT_TRACKING_ID, 0, (MAX_CONTACTS + 1), 0, 0);
+ 
+ 	tpd_type_cap = 1;
+@@ -1206,12 +1382,43 @@
+ 
+ 	GSL_LOGF();
+ 
++	/* [BLOB gsl_probe @0xc034e048, E4/E5/E6] probe order: five-rail power
++	 * (D24 bytes, unchanged) → reset pulse GPIO14 + INT GPIO2 pull-up +
++	 * 100 ms settle (D22/D24, unchanged) → EINT pre-mask → 0xfc×5 link
++	 * gate → guarded sw_init → msleep(20) → alive confirm → EINT
++	 * registration → thread → … → gsl_DataInit(active config) → unmask →
++	 * bounded log-only confirm reads. */
+ 	gsl_power_on();
+ 	gsl_gpio_init();
+ 
+ 	i2c_client = client;
+ 	gsl_dev.client = client;
+ 
++	/* D25 [BLOB E4: mt_eint_mask(2) precedes the first i2c contact] pre-mask
++	 * the touch EINT; the line leaves mask only at the probe tail (after
++	 * DataInit and thread creation), so no spurious panel interrupt can
++	 * run the report path while the chip is still booting. */
++	mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
++
++	/* D25 [BLOB E5 gsl_test_i2c as gate] 5×-retried reg-0xfc link gate —
++	 * replaces the D22 single-shot first read; the blob's probe aborts on
++	 * failure (blt → kfree, return) */
++	ret = gsl_await_chip(client);
++	if (ret != 0) {
++		GSL_LOGE("D25: chip gate failed, touch probe aborted (%d)\n", ret);
++		return ret;
++	}
++
++	/* D25 [BLOB E6 part.4 @0xc034de40] UNCONDITIONAL (guarded) sw_init
++	 * before the alive confirm; sets sw_inited at entry (see gsl_sw_init) */
++	ret = gsl_sw_init(client);
++	if (ret != 0) {
++		GSL_LOGE("D25: sw_init failed (%d), touch probe aborted\n", ret);
++		return ret;
++	}
++
++	msleep(20);
++
+ 	/* bring the controller up (cold start runs the fingerprint autodetect).
+ 	 * D22: check_mem_data returns real results now — probe only binds
+ 	 * after the bounded alive confirmation passed (tpd_load_status stays
+@@ -1239,6 +1446,31 @@
+ #endif
+ 	gsl_dev.halt = 0;
+ 
++	/* D25 [BLOB E6 probe tail] re-apply the ACTIVE config's tuning words,
++	 * THEN take the touch EINT out of mask — vendor order unmasks after
++	 * DataInit (our old path unmasked inside gsl_eint_register). */
++	gsl_data_init_selected();
++	mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
++
++	/* D25 [BLOB E6 tail, bounded non-fatal confirm] msleep(5) then up to
++	 * GSL_CHIP_CONFIRM_TRIES (4) reads of 4 bytes @0xfc, results LOGGED
++	 * ONLY — the chip already passed the alive gate, so this must never
++	 * fail the probe. */
++	msleep(5);
++	{
++		u8 confirm[4] = {0};
++		int tries = GSL_CHIP_CONFIRM_TRIES;
++
++		while (tries-- > 0) {
++			ret = gsl_read_interface(client, GSL_CHIP_AWAIT_REG,
++						 confirm, sizeof(confirm));
++			if (ret == 0)
++				break;
++			GSL_LOGE("D25: confirm read failed (%d), %d tries left\n",
++				 ret, tries);
++		}
++	}
++
+ 	GSL_LOGD("probe ok: config %d\n", gsl_dev.config_id);
+ 	return 0;
+ }
+@@ -1269,18 +1501,23 @@
+ 	{}
+ };
+ 
+-static unsigned short force[] = { GSLX680_ADDR, I2C_CLIENT_END, I2C_CLIENT_END };
+-static const unsigned short *const forces[] = { force, NULL };
+-
++/* D25 [BLOB E1: struct i2c_driver @0xc0b74d64] .driver.name = TPD_DEVICE
++ * ("mtk-tpd" @rodata 0xc0a00da0) — the sysfs driver link shows THIS name
++ * (stock: `0-0040 -> mtk-tpd`); binding itself stays id_table vs client
++ * name, so GSLX680_NAME remains id_table[0] and the i2c_board_info type.
++ * Blob also keeps .detect registered while address_list stays NULL — no
++ * force list: the client comes from the pre-registered i2c_board_info
++ * {gsl_tp @0x40} in tpd_driver_init (E9), and the old force[] list would
++ * only feed the core's smbus-quick emulation (a core that rejects NULL
++ * message buffers) — dead weight at best, removed (Bob §4.2 P5). */
+ static struct i2c_driver tpd_i2c_driver = {
+ 	.driver = {
+-		.name = GSLX680_NAME,
++		.name = TPD_DEVICE,
+ 	},
+ 	.probe = tpd_i2c_probe,
+ 	.remove = tpd_i2c_remove,
+ 	.detect = tpd_i2c_detect,
+ 	.id_table = tpd_i2c_id,
+-	.address_list = (const unsigned short *)forces,
+ };
+ 
+ static struct i2c_board_info __initdata gsl_tp_i2c_tpd = {
+@@ -1288,15 +1525,11 @@
+ };
+ 
+ static struct tpd_driver_t tpd_device_driver = {
+-	.tpd_device_name = GSLX680_NAME,
++	.tpd_device_name = GSLX680_NAME,	/* list identity only (Bob §2.2) */
+ 	.tpd_local_init = tpd_local_init,
+ 	.suspend = tpd_suspend,
+ 	.resume = tpd_resume,
+-#ifdef TPD_HAVE_BUTTON
+-	.tpd_have_button = 1,
+-#else
+-	.tpd_have_button = 0,
+-#endif
++	.tpd_have_button = 1,	/* D25 [BLOB E3]: mtk-tpd-kpd must register */
+ };
+ 
+ static ssize_t db_value_store(struct class *class, struct class_attribute *attr,
+--- a/arch/arm/mach-mt6582/q5/touchpanel/gsl_tp/tpd_custom_gsl_tp.h
++++ b/arch/arm/mach-mt6582/q5/touchpanel/gsl_tp/tpd_custom_gsl_tp.h
+@@ -8,7 +8,11 @@
+  *
+  *   I2C       bus 0, addr 0x40          blob: board-info entry { "gsl_tp", .addr = 0x40 } (mt_devs i2c-0
+  *                                       table at VA 0xc0b0af98) + live device 0-0040 gsl_tp
+- *   driver    "gsl_tp"                  blob: gsl_device_id symbol = "gsl_tp" string (i2c_device_id)
++ *   driver    "gsl_tp"                  blob: gsl_device_id symbol = "gsl_tp" string (i2c_device_id);
++ *                                       D25 blob struct decode @0xc0b74d64: the I2C DRIVER's
++ *                                       name is TPD_DEVICE ("mtk-tpd") — the id_table string
++ *                                       "gsl_tp" matches the CLIENT name only; the sysfs link
++ *                                       0-0040 -> mtk-tpd comes from tpd_i2c_driver.driver.name
+  *   reset     GPIO14 (0x8000000E)       blob: mt_set_gpio_mode/dir/out(0x8000000E, …) in probe/init;
+  *                                       == GPIO_CTP_RST_PIN (GPIO14 | 0x80000000) of cust_gpio_usage.h
+  *   INT       GPIO2, pull-up (0x80000002)
+@@ -40,4 +44,13 @@
+  * by this macro — the D17 patch rewires it at the board level). */
+ #define TPD_EINT_FLOW			EINTF_TRIGGER_RISING
+ 
++/* D25 (bob-tpd-framework-spec §5.1-2, comment-only): the I2C DRIVER name is
++ * TPD_DEVICE ("mtk-tpd", blob E1 struct i2c_driver @0xc0b74d64 decode, via
++ * tpd.h — unchanged constants below). The MTK convention driver.name =
++ * TPD_DEVICE for every panel driver means exactly ONE panel CONFIG may ever
++ * be enabled at a time: a second registration of the same i2c driver name
++ * fails with -EBUSY, and the framework would then silently probe no panel
++ * (no input device). The D25 source gates in build/66_kernel_delta_tpd.sh
++ * lock the current single-driver state. */
++
+ #endif /* _TPD_CUSTOM_GSL_TP_H_ */

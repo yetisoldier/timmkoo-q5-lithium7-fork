@@ -1,5 +1,5 @@
-# Agent scratch and coordination (gitignored)
-.specs/
+# Agent scratch and coordination
+# .specs/ is TRACKED — these are the Bob/Forge design docs Codex needs to resume.
 .karen/
 .reference-*/
 
