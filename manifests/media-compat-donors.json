@@ -1,0 +1,11 @@
+{
+  "libMtkOmxVdec.so": "af15e0dda0139f4b487046e4177562ed6e713934dde4b34f0c40abc5fbc0b133",
+  "libstagefright.so": "4f0725fb504958f1b1f387c64c7f9353683a5b6f0b8df6cd384cce257b4144f1",
+  "libmhalImageCodec.so": "0cd9cf459ed11871a1a83d7408acf3119b5324419292c1f2eadf0d3c7524afbf",
+  "libmmprofile.so": "cea825c18e07e90f9942c49c2d9f703d867bb7f566186b08c62e570e3bba6080",
+  "media_codecs.xml": "c8aac956124a87d4386feac14eb5adef92d3a045a4e642cc64521318174f6863",
+  "mediacodec.rc": "a29c9104c3a0b650cb41038bc13cd30fb871d217f2f2f1b183e1e52543bbda69",
+  "mediacodec-seccomp.policy": "1c1c07a423b2b2d3931e1ab1b29eb058f7bc4d8512001efc6e55c0a665b65a4c",
+  "libm4u.so": "f3cdbb80899657fdb45e3d2d8f79567f9abed0427c48a51fb2c60095515ef8c9",
+  "libvcodec_utility.so": "d2f662387c1f8cda9964ce95cdb5e757b7d8140fb5a8897fba92a82b3db0ff7c"
+}
