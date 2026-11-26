@@ -60,7 +60,7 @@ rm -rf \
   "${KDIR}/drivers/misc/mediatek/lcm/gc9503v_wvga_dsi_vdo_hsd" \
   "${KDIR}/drivers/misc/mediatek/lcm/gc9503v_wvga_dsi_vdo_boe"
 BAD="$(git -C "${KERNEL_REPO_ROOT}" status --porcelain \
-  | grep -v -E '^\?\? kernel-3\.10/build-(alpha|beta|beta-touch|beta-touch-lcm)/$' || true)"
+  | grep -v -E '^\?\? kernel-3\.10/build-(alpha|beta|beta-touch|beta-touch-lcm|beta-touch-lcm-board)/$' || true)"
 [ -z "${BAD}" ] || die "unexpected reference-tree state:
 ${BAD}"
 log "reference tree pristine (O= build-alpha/build-beta/build-beta-touch/build-beta-touch-lcm preserved)"
@@ -128,6 +128,10 @@ find "${KDIR}/arch/arm/mach-mt6582/q5" "${KDIR}/arch/arm/configs/q5_defconfig" \
      "${KDIR}/drivers/misc/mediatek/imgsensor/src/mt6582/gc5004_mipi_raw" \
      "${KDIR}/drivers/misc/mediatek/imgsensor/src/mt6582/hi253_yuv" \
      "${KDIR}/drivers/misc/mediatek/imgsensor/src/mt6582/hi704_yuv" \
+     "${KDIR}/drivers/misc/mediatek/Makefile.custom" \
+     "${KDIR}/drivers/misc/mediatek/video/mt6582/dsi_drv.c" \
+     "${KDIR}/drivers/misc/mediatek/video/mt6582/mtkfb.c" \
+     "${KDIR}/drivers/misc/mediatek/mmc-host/mt6582/sd.c" \
      "${KDIR}/drivers/misc/mediatek/lens/mt6582/dw9714af" \
      "${KDIR}/drivers/misc/mediatek/lens/mt6582/dw9719af" \
      -type f -exec touch -d "@${KBUILD_HEAD_EPOCH}" {} + 2>/dev/null || true
