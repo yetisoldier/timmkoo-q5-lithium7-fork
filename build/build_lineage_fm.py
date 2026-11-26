@@ -55,7 +55,9 @@ def main():
     config_data = config.read_bytes()
     old = b'<bool name="config_useSoftwareRenderingForAudio" translatable="false">true</bool>'
     assert config_data.count(old) == 1
-    config.write_bytes(config_data.replace(old, old.replace(b'>true<', b'>false<')))
+    # Keep upstream software rendering: this HAL's direct FM patch can be
+    # accepted without producing headphone output. RADIO_TUNER capture still
+    # requires persist.af.audio_patch_fm=1 in the HAL.
     with zipfile.ZipFile(a.tools / 'cardview.aar') as z:
         z.extractall(a.out / 'cardview')
     ns = 'http://schemas.android.com/apk/res/android'
@@ -105,7 +107,7 @@ def main():
     result = {'source_commit': revision, 'package': 'com.android.fmradio',
               'sha256': sha(a.out / 'FMRadio.apk'),
               'native_sha256': hashlib.sha256(native).hexdigest(),
-              'target_sdk': 22, 'shared_system_uid': False, 'force_software_audio': False,
+              'target_sdk': 22, 'shared_system_uid': False, 'force_software_audio': True,
               'note': 'Requires privileged install; physical FM audio validation is separate.'}
     (a.out / 'fm-build-manifest.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))

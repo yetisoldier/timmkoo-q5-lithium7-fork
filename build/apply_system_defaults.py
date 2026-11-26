@@ -40,7 +40,7 @@ def main():
     fm_manifest = json.loads((a.fm.parent / 'fm-build-manifest.json').read_text())
     assert sha(a.fm) == fm_manifest['sha256'], 'FM build does not match its manifest'
     assert fm_manifest['package'] == 'com.android.fmradio'
-    assert fm_manifest['force_software_audio'] is False
+    assert fm_manifest['force_software_audio'] is True
     media_manifest = json.loads((a.media / 'media-compat-manifest.json').read_text())
     for name, expected in media_manifest['outputs'].items():
         assert sha(a.media / name) == expected, name

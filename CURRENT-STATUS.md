@@ -317,6 +317,11 @@ passed. ZIP member CRCs were checked and a SHA256SUMS/manifest included. Use
 
 ## Latest application/media checkpoint
 
+**FM follow-up:** the user confirmed the direct-headphone FM configuration in
+this archive is silent. A newer live test restores upstream software rendering
+with the HAL audio-patch property enabled; listening confirmation is pending.
+Do not treat the archive below as the latest completed FM fix.
+
 `out/Q5-Mint-Lithium7-D42-R3-appfix-development-20261126.zip` supersedes both
 earlier November 26 archives. SHA-256:
 `e5ad6761e7404264536e02ef543f41a937916dffc24b8e8add5a497949d7a89a`.

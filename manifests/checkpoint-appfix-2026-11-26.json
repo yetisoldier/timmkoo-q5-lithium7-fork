@@ -1,6 +1,6 @@
 {
   "date": "2026-11-26",
-  "status": "development; physical FM listening and clean-install validation outstanding",
+  "status": "superseded FM configuration: user confirmed direct FM listening remains silent; rebuild with software rendering before using as latest checkpoint",
   "archive": "Q5-Mint-Lithium7-D42-R3-appfix-development-20261126.zip",
   "archive_sha256": "e5ad6761e7404264536e02ef543f41a937916dffc24b8e8add5a497949d7a89a",
   "files": {

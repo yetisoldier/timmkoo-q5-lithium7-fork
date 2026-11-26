@@ -28,9 +28,12 @@ kernel UAPI. JNI registration and argument-buffer code stay unchanged. See
 The root Java probe passed open, RX power-up, tune 93.7, mute, power-down and
 close. The original uncorrected JNI opened but failed GETCHIPID and power-up.
 
-The app resource `config_useSoftwareRenderingForAudio` is false, allowing its
-normal direct-headphone patch before software fallback. Crucially, this HAL
-also requires **persist.af.audio_patch_fm=1**, read during HardwareInit. Its
+The user subsequently confirmed the direct-headphone patch was still silent.
+The app now retains upstream `config_useSoftwareRenderingForAudio=true`, so
+normal listening uses RADIO_TUNER capture followed by a STREAM_MUSIC AudioTrack,
+the same software path used for the successful nonzero recording test. This
+combination is undergoing a fresh listening check. Crucially, the HAL also
+requires **persist.af.audio_patch_fm=1**, read during HardwareInit. Its
 default is zero; without it, a registered patch and active audio stream can
 remain entirely silent. This was verified in the actual original HAL's
 disassembly. Restart audioserver or reboot after changing the property.
