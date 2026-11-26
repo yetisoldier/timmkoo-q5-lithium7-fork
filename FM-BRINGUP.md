@@ -9,8 +9,8 @@ MediaPlayer. A successful RF power-up never established audible playback.
 
 Use the Lineage cm-14.1 receiver, pinned to
 `3aa58f54e9c8cdf79aba25e4a71bf1bb6668d8f7`, package `com.android.fmradio`.
-It uses STREAM_MUSIC, Android audio patches and a RADIO_TUNER capture/playback
-fallback. It replaces `com.mediatek.FMRadio`; do not leave its userdata update
+It uses RADIO_TUNER capture and STREAM_MUSIC software playback, with
+Android audio patches handled by the original HAL. It replaces `com.mediatek.FMRadio`; do not leave its userdata update
 installed over the old system app.
 
 The build retains a separate app UID, removes the upstream shared system UID,
@@ -31,8 +31,9 @@ close. The original uncorrected JNI opened but failed GETCHIPID and power-up.
 The user subsequently confirmed the direct-headphone patch was still silent.
 The app now retains upstream `config_useSoftwareRenderingForAudio=true`, so
 normal listening uses RADIO_TUNER capture followed by a STREAM_MUSIC AudioTrack,
-the same software path used for the successful nonzero recording test. This
-combination is undergoing a fresh listening check. Crucially, the HAL also
+the same software path used for the successful nonzero recording test. The
+user confirmed audible radio on 93.7 through wired headphones with this
+combination. Crucially, the HAL also
 requires **persist.af.audio_patch_fm=1**, read during HardwareInit. Its
 default is zero; without it, a registered patch and active audio stream can
 remain entirely silent. This was verified in the actual original HAL's
@@ -43,8 +44,13 @@ FM_IOCTL_GET_AUDIO_INFO and AUDDRV_SET_FM_I2S_GPIO. A subsequent 6.50-second
 93.7 recording contains nonzero PCM, approximately -9.38 dBFS RMS; the same
 app's earlier capture with the property absent was exactly zero. Read-only
 queries showed chip 0x6627, powered=1 and RSSI approximately -65 to -69.
-Volume Up/Down leaves the app process alive. Physical intelligibility and
-station-listening confirmation remain separate from these measurements.
+The user then confirmed audible FM reception, beyond these capture metrics.
+Volume Up/Down leaves the app process alive. Pause stops both active tracks;
+Play resumes tuner capture and music playback in the same process. The final
+tested APK SHA-256 is
+`e577b65c20159f544778eba7cfb4f712e83e585278971acf3353cebd123fb7ed`.
+FM speaker routing, Bluetooth FM output and a full station scan have not been
+physically verified; they are separate from headphone listening.
 Temporary FM audit recordings were discarded and private host audio removed.
 The user's voice-recorder message is preserved.
 

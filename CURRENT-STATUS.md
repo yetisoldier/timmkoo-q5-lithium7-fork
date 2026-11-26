@@ -315,24 +315,25 @@ needed only the inode-bitmap padding repair from e2fsck; a second read-only fsck
 passed. ZIP member CRCs were checked and a SHA256SUMS/manifest included. Use
 `build/package_checkpoint.py` to reproduce packaging; it never flashes.
 
-## Latest application/media checkpoint
+## Superseded direct-route FM checkpoint
 
-**FM follow-up:** the user confirmed the direct-headphone FM configuration in
-this archive is silent. A newer live test restores upstream software rendering
-with the HAL audio-patch property enabled; listening confirmation is pending.
-Do not treat the archive below as the latest completed FM fix.
+`out/Q5-Mint-Lithium7-D42-R3-appfix-development-20261126.zip` used the silent
+direct FM route. It is superseded by the FM-confirmed checkpoint below.
+Its historical manifest is retained for traceability; do not use it as latest.
 
-`out/Q5-Mint-Lithium7-D42-R3-appfix-development-20261126.zip` supersedes both
-earlier November 26 archives. SHA-256:
-`e5ad6761e7404264536e02ef543f41a937916dffc24b8e8add5a497949d7a89a`.
-It includes the R3 boot, video compatibility/cleanup fixes, Lineage FM with its
-required HAL property, WebView 119, recorder, F7 navigation settings, branding
-and app/feature cleanup. `manifests/checkpoint-appfix-2026-11-26.json` records
-the package members and remaining checks. All 36 generated changed system
-files matched the installed device byte-for-byte after reboot.
+## Latest FM-confirmed application/media checkpoint
 
-The user's short spoken recording and the requested generated test song are
-visible in Music. Recordings, account data, adopted-volume keys and other
-userdata are excluded from the checkpoint. App server sign-in, physical FM
-listening, paired Bluetooth audio and low-battery charging remain distinct
-from the automated checks. No clean-install or factory-reset pass is claimed.
+`out/Q5-Mint-Lithium7-D42-R3-FM-confirmed-development-20261126.zip` includes
+the R3 boot, video compatibility/cleanup fixes, user-confirmed Lineage FM with
+software rendering and its required HAL property, WebView 119, recorder, F7
+navigation settings, branding and app/feature cleanup.
+`manifests/checkpoint-fm-confirmed-2026-11-26.json` records member hashes and
+remaining checks. All 36 generated changed system files match the installed
+device byte-for-byte. The user confirmed hearing 93.7 through wired headphones,
+then confirmed it still works after the pause/resume and volume checks.
+
+The user's short spoken recording and requested generated test song are visible
+in Music. Recordings, account data, adopted-volume keys and all other userdata
+are excluded from the checkpoint. Server sign-in, paired Bluetooth audio,
+FM speaker/Bluetooth routing, a full FM station scan and low-battery charging
+remain separate checks. No clean-install or factory-reset pass is claimed.

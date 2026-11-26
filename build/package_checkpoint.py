@@ -96,8 +96,8 @@ Gnome boot/default wallpaper. Jelly and HTMLViewer browser apps removed.
 Unused Lawnfeed update/install prompts disabled. Open Camera and Xposed
 Installer removed. Camera omitted per purchase evidence; no fitted sensor is
 confirmed. Lineage FM receiver and Audio Recorder included. USB MTP transfer fixed.
-FM needs wired
-headphones as an antenna; RF reception and Bluetooth audio need physical tests.
+FM reception on 93.7 through wired headphones is user-confirmed. Headphones
+serve as the antenna. Bluetooth audio remains a physical test.
 Hardware H.264 720p playback restored; the 1080p test uses software fallback.
 Embedded WebView 119 fixes Audiobookshelf's collapsed server connection controls.
 Audiobookshelf, Plexamp and Apple Music are separate test installations in

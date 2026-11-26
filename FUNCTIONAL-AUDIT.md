@@ -30,8 +30,9 @@ and asked to omit the camera absent positive hardware evidence.
   private audit audio is not published.
 * FM receiver replaced with the Android 7 Lineage app and corrected Lithium JNI.
   The HAL's disabled audio-patch setting was an additional silent-audio cause.
-  Nonzero tuner capture and volume-key regression pass; physical listening
-  remains to be confirmed. See [FM-BRINGUP.md](FM-BRINGUP.md).
+  The user confirmed hearing 93.7 through wired headphones with software
+  rendering and the HAL property enabled. Volume-key and pause/resume checks
+  pass. See [FM-BRINGUP.md](FM-BRINGUP.md).
 * 36 device-protected app folders retained obsolete UIDs from earlier installs.
   Repaired only files owned by each folder's old UID/GID, without traversing
   symlinks; credential-protected owners matched. This is a live-data repair,
