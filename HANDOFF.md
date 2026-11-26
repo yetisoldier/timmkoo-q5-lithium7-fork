@@ -86,7 +86,7 @@ These were diagnosed iteratively against real device logs:
 | **D30** | DMA with `virt_to_phys()` buffer | boots; 81-byte DMA write goes out; `0xb0` still `0x00` |
 | **D31** | alive gate non-fatal (experiment) | driver bound a DEAD chip → **no events** + device thrash (load 9+) |
 | **D32** | restore fatal gate + print canary `0xb4` | fatal gate correct; canary print lost to boot-log rotation |
-| **D33** | print `0xb0`/`0xb8`/`0xb4` on every `check_mem_data` | *board14, in-flight at pause* |
+| **D33** | print `0xb0`/`0xb8`/`0xb4` on every `check_mem_data` | *board14 built (sha `abd3e7bdd13f…`), ready to flash* |
 
 ### Critical technical finding — heyrudra mt6582 I²C semantics
 
