@@ -97,6 +97,14 @@ making the entire kernel text writable.
 - The user reports a front lens/opening above the screen, no rear lens, and
   supplied an online product image matching the Mint-style case. Taking a
   photo on OEM/Mint has never been demonstrated on this unit.
+- Purchase listing supplied by the user:
+  https://www.aliexpress.us/item/3256810146190263.html . On November 26 the
+  user checked it and reported no reference to a camera. Automated access to
+  the seller page failed, so that observation has not been independently
+  verified against the complete specifications. Combined with the empty Mint
+  sensor list and unsuccessful probes, camera hardware is **unconfirmed**.
+  Do not label an advertised/previously working camera as regressed, and do
+  not identify the opening as a microphone, LED or dummy lens without evidence.
 - Mint is the user's only known-good overall firmware. Its local reference is
   Sendew/TIMMKOO-Q5-Mint-Custom-ROM v1.0, not verified OEM firmware.
 - **Hyn_device is Hynitron CST touch**, registered by `cst2xx_ts_init` at
@@ -265,8 +273,9 @@ Reproduce only on the rooted development unit, recording /dev/kmsg before
 restarting cameraserver. Set camera_probe_budget to 10, stop/start cameraserver,
 capture Q5CAM lines, and reset the parameter to 0. Avoid accidentally treating
 the unrelated GC5004 template name as evidence for rear hardware. There is no
-reported rear lens. The user has been asked for an original listing/manual
-that explicitly advertises camera support, to help resolve the hardware gap.
+reported rear lens. The supplied purchase listing has no camera reference
+according to the user's inspection. Further camera-specific changes need
+positive hardware identification or evidence of actual camera operation.
 
 ## Local checkpoint package
 
