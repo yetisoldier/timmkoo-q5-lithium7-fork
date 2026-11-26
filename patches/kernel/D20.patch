@@ -1,0 +1,350 @@
+# D20 — the Q5 board-value port: DCT-include-precedence + the decoded divergent pins
+# Spec: .specs/bob-m4-board-port.md §3.2 (D20). Task: .specs/forge-m4-task.md.
+#
+# THE MECHANISM FIRST (§3.2 "the single most important implementation fact"): DrvGen
+# regenerates the DCT headers from q5/dct/dct/codegen.dws into the O dir at EVERY
+# build (archprepare -> tools/dct/DrvGen; scripts/drvgen/drvgen.mk via
+# arch/arm/Makefile:298) and the O-dir copy is the ONLY /inc dir on the compile
+# path -- verified live: build-beta-touch-lcm's .pmic_drv.o.cmd / .sd.o.cmd /
+# .accdet.o.cmd / .hal_kpd.o.cmd all resolve cust_eint.h etc. from
+# -I<objtree>/arch/arm/mach-mt6582/q5/dct/dct/inc. Editing the source-tree
+# headers alone would be a silent no-op. D20 therefore adds
+#     -I$(MTK_PROJECT_PATH_ROOT)/dct/dct/inc   BEFORE   -I$(DRVGEN_OUT)/inc
+# to drivers/misc/mediatek/Makefile.custom (consumed by both the mediatek driver
+# tree and arch/arm/mach-mt6582, whose Makefile includes Makefile.custom), and
+# maintains the Q5-pinned values IN THE SOURCE HEADERS. DrvGen still runs
+# (unused for the three overridden headers); every other header keeps resolving
+# from DrvGen and stays bit-identical to today. build/62 asserts the pinned
+# values AND proves the precedence took effect on the compiled outputs.
+#
+# VALUE SOURCES: every constant was re-decoded this session from the pinned
+# Lithium kernel blob (kernel.img 5217dd41..., decomp d284ba16..., base
+# 0xc0008000; symbols lithium.elf/lithium.syms) -- forge-m4-report §2 carries the
+# full VA trail. Nothing copied blindly; several spec-row values were corrected
+# by the re-decode (documented below and in the report).
+#
+# PORTED (priority order per §3.2):
+#  1. MSDC1 card-detect: CUST_EINT_MSDC1_INS_NUM 8->3, _DEBOUNCE_CN 1->0
+#     (cust_eint.h). Blob: mt_eint_mask(3) @c04f0258, set_hw_debounce(3,0)
+#     @c04f02d8, mt_eint_registration(3, LOW(8)|HIGH(4) by sd_cd_polarity,
+#     msdc1_eint_handler @0xc04f0344, auto-unmask=1) @c04f02fc; pad triple on
+#     GPIO3|0x80000000 mode0/dir0/out0 @c04f0268-84. The fork's msdc1_hw IS the
+#     SD+CD-PIN variant (no CONFIG_MTK_WCN_CMB_SDIO_SLOT in q5_defconfig ->
+#     board.c #else branch: flags CD_PIN_EN|REMOVABLE, host_function MSDC_SD,
+#     cd_level MSDC_CD_LOW) so the fork registers CD channel 8 TODAY -- watching
+#     GPIO8, the Q5's SPEAKER pad (false card events). Trigger LOW(8)=/HIGH(4)-
+#     by-polarity arms match the fork's msdc1_eint_handler logic byte-for-byte
+#     (sd.c set_polarity LOW/HIGH pairs) — only the channel + debounce port.
+#     NEW GPIO_MSDC1_EINT_PIN = GPIO3 (GPIO3|0x80000000) + the vendor's
+#     mode0/dir-in/out-low triple ported into msdc_enable_cd_irq's enable arm
+#     (sd.c) gated on the same CD-wired condition the vendor uses, so the
+#     registered channel actually watches the card line like the vendor build.
+#  2. ACCDET: CUST_EINT_ACCDET_NUM 0->4 (cust_eint.h),
+#     GPIO_ACCDET_EINT_PIN GPIO0->GPIO4 (cust_gpio_usage.h). Blob: probe setup
+#     @c04a355c-78 = mode0/dir-in/pull-disable on 0x80000004 -- identical calls
+#     to the fork's accdet.c:487-489; mt_eint_set_hw_debounce(4,256) @c04a357c
+#     (= CUST_EINT_ACCDET_DEBOUNCE_CN 256, unchanged); registration(4,
+#     TRIGGER_LOW(8)=CUST_EINT_ACCDET_TYPE, accdet_eint_func, auto=0)
+#     @c04a358c. NOTE (re-decode correction to the spec row): the blob's
+#     accdet_eint_func ALSO toggles GPIO7 (0x80000007) for the auxadc/headset
+#     switch — the fork's accdet.c compiles NO such consumer (GPIO_FSA8049_PIN
+#     undefined; init hook #ifdef'd out; the fork's eint-func has the
+#     polarity/debounce re-arm but not the GPIO toggle). GPIO7 is NOT ported
+#     (would compile in a one-shot init toggle without the runtime toggle pair
+#     -- a half-feature); flagged in forge-m4-report §4 for Bob's D-id if the
+#     on-device audio-jack behavior ever needs it.
+#  3. OTG: NO PORT — a106 GPIO_OTG_IDDIG_EINT_PIN GPIO17 == blob (mt_usb_otg_init
+#     @c0545b34-68: mode0/dir-in/pull-up on GPIO17|0x80000011, eint_set_sens(17,1)
+#     + debounce(17,64) + registration(17, LOW, ..., 0) — all chip/USB-subsystem
+#     values, not board pins). GPIO_OTG_DRVVBUS_PIN: the blob's VBUS path has NO
+#     GPIO at all -- mt_usb_set_vbus @c0544524 selects charger-IC OTG boost
+#     (bct24157_set_otg_en/cf40 or fan5405_set_otg_en/...c052b7bc). The rodata
+#     anchor 0xc0daf358 named in the spec is BSS (state vars, incl. the
+#     is_aw87559 flag @0xc0daf460 read by is_aw87559_exit @c056f2bc), not a pin
+#     pool. Fork keeps its a106 GPIO93 entry (no Q5 function collides with it;
+#     documented in the report).
+#  4. Leds hygiene (cust_leds.c): red/green/button PMIC ISINK1/0/2 ->
+#     MT65XX_LED_MODE_NONE, -1 — the blob's get_cust_led_list array
+#     @0xc0b5fb7c carries NONE,-1 for all six non-LCD entries. The
+#     lcd-backlight entry stays byte-identical (mode5 = CUST_BLS_PWM,
+#     disp_bls_set_backlight == blob 0xc03a743c; PWM support 256 == blob
+#     @c004e2e8).
+#  5. Keypad (cust_kpd.h): the blob's compiled kpd_keymap rodata @0xc08d0e34 =
+#     {[0]=114 VOLUMEDOWN, [1]=115 VOLUMEUP, 0...} vs a106 {[1]=VOLUP,[2]=VOLDOWN}
+#     — the matrix wiring differs by one, so the port IS required ("expected
+#     match" did not hold; recovery/DL keys keep their meanings: hw1=VOLUP
+#     unchanged). kpd_set_debounce(1024) @c04a4990 == KPD_KEY_DEBOUNCE 1024
+#     (unchanged); MTK_PMIC_PWR_KEY=8 is PMIC-chip-level, matches.
+#  6. RTC BBPU / vibrator: NO PORT — hal_rtc_bbpu_pwdn GPIO triple =
+#     GPIO_SRCLKEN_PIN = GPIO37|0x80000025 @c0493880 == the fork's
+#     include/linux/pmic6326_sw.h:61 define (GPIO37); vibrator cust struct
+#     @0xc0b5fb70 = {50, 9, 0x5} == the fork's cust_vibrator.c byte-for-byte.
+#  6b. SPEAKER (re-decode correction to the spec's §2 speaker row): the Q5's
+#     Speaker_Init/Sound_Speaker_Turnon program GPIO8|0x80000008 (a106: GPIO6),
+#     gated on is_aw87559_exit() so amp-fitted units (the fork's D13/D14 i2c
+#     path) never drive it. GPIO_SPEAKER_EN_PIN GPIO6->GPIO8 hygiene port
+#     (cust_gpio_usage.h); no compiled consumer changes in this tree.
+#  7. Camera re-check (assertion-only per design): main CMRST/CMPDN GPIO9/10 ==
+#     blob pinSet rows @0xc083c170+0x00/+0x10. SUB-CAMERA DIVERGES — re-decode
+#     found the blob at GPIO16/GPIO18 (@+0x20/+0x30) vs the a106 lineage's
+#     GPIO3/GPIO4, which are exactly the Q5's card-detect and ACCDET pads -- two
+#     drivers would fight over the same lines once items 1-2 land. Ported
+#     CMRST1 GPIO3->GPIO16, CMPDN1 GPIO4->GPIO18 (cust_gpio_usage.h). This
+#     extension of the row's "verify-only" wording is flagged prominently in
+#     forge-m4-report §4 (Bob may veto with a 2-line revert).
+#
+# NOT PORTED (per spec §3.2 — documented, do not re-chase): cust_gpio_boot.h
+# (inert: 4 consumers, all unbuilt), PMIC cust/eint (empty/equal, asserted),
+# TE/LANE/LCM-reset (closed by D18 + register-only evidence), clocks/PLL (no
+# board table), partitions/touch/LCM (D18/D17).
+#
+# PARITY + PRECEDENCE GATES (build/62_kernel_delta_board.sh): the D20 constants
+# asserted in source; the compiled proof = hal_kpd.o .data {[0]=114,[1]=115},
+# kd_camera_hw.o rodata carries 0x80000010/0x80000012 and NOT 0x80000003/4,
+# sd.o registration immediate 3 (was 8) + debounce arg 0 (was 1), accdet.o
+# immediate 4 (was 0) + 0x80000004 GPIO arg (was 0x80000000).
+---
+
+--- a/arch/arm/mach-mt6582/q5/dct/dct/inc/cust_eint.h
++++ b/arch/arm/mach-mt6582/q5/dct/dct/inc/cust_eint.h
+@@ -4,6 +4,24 @@
+  * Do Not Modify the File.
+  */
+ 
++/* D20 (bob-m4 §3.2): Q5 board values ported over the a106 lineage on the two
++ * EINT channels the pinned Lithium blob proves divergent. This copy of the
++ * header is NOT the a106 original any more and does NOT match the DrvGen output:
++ * drivers/misc/mediatek/Makefile.custom resolves -I$(MTK_PROJECT_PATH_ROOT)/dct/
++ * dct/inc BEFORE -I$(DRVGEN_OUT)/inc, so THIS file wins include precedence over
++ * the per-build DrvGen regeneration (codegen.dws is a106-provenanced). If a
++ * value below is reverted/stale, build/62_kernel_delta_board.sh fails loudly.
++ * Evidence (blob VA anchors, forge-m4-report §2):
++ *   MSDC1-INS  ch 3 (mt_eint_mask(3) @c04f0258, mt_eint_set_hw_debounce(3,0)
++ *              @c04f02d8, mt_eint_registration(3, LOW|HIGH, msdc1_eint_handler,
++ *              auto=1) @c04f02fc; a106 was ch 8 = GPIO8, debounce 1)
++ *   ACCDET     ch 4 (mt_eint_set_polarity(4,..) @c04a1f00/c04a1f94,
++ *              mt_eint_set_hw_debounce(4,20|256) @c04a1f0c/c04a1f9c+
++ *              @c04a357c, mt_eint_registration(4, TRIGGER_LOW(8),
++ *              accdet_eint_func, 0) @c04a358c; a106 was ch 0)
++ *   Everything else byte-identical to the a106 lineage (PMIC 25 HIGH deb1
++ *   re-verified against PMIC_EINT_SETTING @c0510e2c; ALS/CTP/GSE untouched). */
++
+ #ifndef __CUST_EINTH
+ #define __CUST_EINTH
+ 
+@@ -22,7 +40,7 @@
+ //////////////////////////////////////////////////////////////////////////////
+ 
+ 
+-#define CUST_EINT_ACCDET_NUM              0
++#define CUST_EINT_ACCDET_NUM              4
+ #define CUST_EINT_ACCDET_DEBOUNCE_CN      256
+ #define CUST_EINT_ACCDET_TYPE							CUST_EINTF_TRIGGER_LOW
+ #define CUST_EINT_ACCDET_DEBOUNCE_EN      CUST_EINT_DEBOUNCE_ENABLE
+@@ -42,8 +60,8 @@
+ #define CUST_EINT_GSE_2_TYPE							CUST_EINTF_TRIGGER_HIGH
+ #define CUST_EINT_GSE_2_DEBOUNCE_EN      CUST_EINT_DEBOUNCE_DISABLE
+ 
+-#define CUST_EINT_MSDC1_INS_NUM              8
+-#define CUST_EINT_MSDC1_INS_DEBOUNCE_CN      1
++#define CUST_EINT_MSDC1_INS_NUM              3
++#define CUST_EINT_MSDC1_INS_DEBOUNCE_CN      0
+ #define CUST_EINT_MSDC1_INS_TYPE							CUST_EINTF_TRIGGER_LOW
+ #define CUST_EINT_MSDC1_INS_DEBOUNCE_EN      CUST_EINT_DEBOUNCE_ENABLE
+ 
+
+--- a/arch/arm/mach-mt6582/q5/dct/dct/inc/cust_kpd.h
++++ b/arch/arm/mach-mt6582/q5/dct/dct/inc/cust_kpd.h
+@@ -4,6 +4,19 @@
+  * Do Not Modify the File.
+  */
+ 
++/* D20 (bob-m4 §3.2 row 5): the Q5's matrix wiring differs from a106 — the pinned
++ * Lithium blob's compiled kpd_keymap (rodata @0xc08d0e34, 72 u16 entries copied
++ * byte-exact into hal_kpd.c's kpd_keymap[] by kpd_init_keymap @c04a4fa8) carries
++ * { [0] = 114 (KEY_VOLUMEDOWN), [1] = 115 (KEY_VOLUMEUP), 0... } vs the a106
++ * lineage's { [1] = VOLUP, [2] = VOLDOWN }. This copy wins include precedence over
++ * the per-build DrvGen output (mechanism in cust_eint.h's D20 banner); build/62
++ * asserts the map. Blob pwrkey facts re-verified, no change needed:
++ * kpd_set_debounce(1024) @c04a4990 == KPD_KEY_DEBOUNCE 1024; PMIC pwrkey plumbing
++ * is chip-level (MT6323), kpd_pwrkey_pmic_handler @c04a4af4 present as in the
++ * fork. The KPD_DL_KEY / MT65XX_RECOVERY_KEY macros (LK-side contracts, no
++ * kernel consumer) and the LPRST flag block (blob compiles it OUT) left as the
++ * a106 lineage. */
++
+ #ifndef _CUST_KPD_H_
+ #define _CUST_KPD_H_
+ #include <linux/input.h>
+@@ -60,11 +73,14 @@
+ #define KPD_PWRKEY_MAP    KEY_POWER
+ #define MTK_PMIC_PWR_KEY    8
+ 
+-/* HW keycode [0 ~ 71] -> Linux keycode */
++/* HW keycode [0 ~ 71] -> Linux keycode. D20: Q5 wiring per the pinned Lithium
++ * blob's compiled kpd_keymap @0xc08d0e34 ({[0]=VOLDOWN,[1]=VOLUP}); the a106
++ * lineage shifted the pair by one ([1]=VOLUP,[2]=VOLDOWN) — on the Q5 that would
++ * read the matrix pads one-off (VOL+/- never emitted). */
+ #define KPD_INIT_KEYMAP()	\
+ {	\
++	[0] = KEY_VOLUMEDOWN,		\
+ 	[1] = KEY_VOLUMEUP,		\
+-	[2] = KEY_VOLUMEDOWN,		\
+ }	 
+ /*****************************************************************/
+ /*******************Preload Customation***************************/
+--- a/arch/arm/mach-mt6582/q5/dct/dct/inc/cust_gpio_usage.h
++++ b/arch/arm/mach-mt6582/q5/dct/dct/inc/cust_gpio_usage.h
+@@ -4,11 +4,32 @@
+  * Do Not Modify the File.
+  */
+ 
++/* D20 (bob-m4 §3.2): Q5 board pins ported over the a106 lineage where the pinned
++ * Lithium blob proves divergence. This copy wins include precedence over the per-
++ * build DrvGen regeneration (see the D20 banner in cust_eint.h for the mechanism;
++ * build/62_kernel_delta_board.sh asserts every value below).
++ * Blobs anchors (VA trail in forge-m4-report §2):
++ *   GPIO_ACCDET_EINT_PIN   GPIO0 -> GPIO4   (probe triple @c04a355c-78:
++ *       mode0/dir-in/pull-off on 0x80000004; a106's GPIO0 = 0x80000000)
++ *   GPIO_CAMERA_CMRST1_PIN GPIO3 -> GPIO16  (kdCISModulePowerOn rodata pinSet[1][IDX_PS_CMRST]
++ *       = 0x80000010 in the table copied from 0xc083c170+0x20; a106's GPIO3 is the
++ *       Q5's card-detect pad) — also un-done the 3/4 sub-camera ↔ CD/ACCRET collision
++ *   GPIO_CAMERA_CMPDN1_PIN GPIO4 -> GPIO18  (0x80000012 @0xc083c170+0x30)
++ *   GPIO_SPEAKER_EN_PIN    GPIO6 -> GPIO8   (Speaker_Init triple @c049e454-70 on
++ *       0x80000008, gated by is_aw87559_exit() @c056f2bc — on amp-fitted units the
++ *       vendor keeps GPIO8 inert; no compiled consumer in this tree, hygiene-ported)
++ *   + GPIO_MSDC1_EINT_PIN  = GPIO3 (NEW; vendor programs it in msdc_enable_cd_irq
++ *       @c04f0268: mode0/dir-in/out-low on 0x80000003; consumed by sd.c as of D20)
++ *   Main-camera pins byte-verified identical (CMRST GPIO9 @c083c170+0x00,
++ *   CMPDN GPIO10 @+0x10). Mux-mode labels below stay in a106's DWS vocabulary;
++ *   only the _M_GPIO (mode 0) selection is consumed by the D20 consumers, exactly
++ *   as the blob's driver code does. */
++
+ #ifndef __CUST_GPIO_USAGE_H__
+ #define __CUST_GPIO_USAGE_H__
+ 
+ 
+-#define GPIO_ACCDET_EINT_PIN         (GPIO0 | 0x80000000)
++#define GPIO_ACCDET_EINT_PIN         (GPIO4 | 0x80000000)
+ #define GPIO_ACCDET_EINT_PIN_M_GPIO  GPIO_MODE_00
+ #define GPIO_ACCDET_EINT_PIN_M_PWM  GPIO_MODE_01
+ #define GPIO_ACCDET_EINT_PIN_M_EINT  GPIO_ACCDET_EINT_PIN_M_GPIO
+@@ -28,7 +49,7 @@
+ #define GPIO_CTP_EINT_PIN_CLK     CLK_OUT0
+ #define GPIO_CTP_EINT_PIN_FREQ    GPIO_CLKSRC_NONE
+ 
+-#define GPIO_CAMERA_CMRST1_PIN         (GPIO3 | 0x80000000)
++#define GPIO_CAMERA_CMRST1_PIN         (GPIO16 | 0x80000000)
+ #define GPIO_CAMERA_CMRST1_PIN_M_GPIO  GPIO_MODE_00
+ #define GPIO_CAMERA_CMRST1_PIN_M_CLK  GPIO_MODE_01
+ #define GPIO_CAMERA_CMRST1_PIN_M_MDEINT  GPIO_MODE_04
+@@ -39,7 +60,7 @@
+ #define GPIO_CAMERA_CMRST1_PIN_CLK     CLK_OUT1
+ #define GPIO_CAMERA_CMRST1_PIN_FREQ    GPIO_CLKSRC_NONE
+ 
+-#define GPIO_CAMERA_CMPDN1_PIN         (GPIO4 | 0x80000000)
++#define GPIO_CAMERA_CMPDN1_PIN         (GPIO18 | 0x80000000)
+ #define GPIO_CAMERA_CMPDN1_PIN_M_GPIO  GPIO_MODE_00
+ #define GPIO_CAMERA_CMPDN1_PIN_M_CLK  GPIO_MODE_01
+ #define GPIO_CAMERA_CMPDN1_PIN_M_DPI_D   GPIO_MODE_02
+@@ -55,7 +76,7 @@
+ #define GPIO_GSE_2_EINT_PIN_M_KCOL  GPIO_MODE_06
+ #define GPIO_GSE_2_EINT_PIN_M_EINT  GPIO_GSE_2_EINT_PIN_M_GPIO
+ 
+-#define GPIO_SPEAKER_EN_PIN         (GPIO6 | 0x80000000)
++#define GPIO_SPEAKER_EN_PIN         (GPIO8 | 0x80000000)
+ #define GPIO_SPEAKER_EN_PIN_M_GPIO  GPIO_MODE_00
+ #define GPIO_SPEAKER_EN_PIN_M_KCOL  GPIO_MODE_06
+ 
+@@ -255,6 +276,13 @@
+ #define GPIO_UART_UTXD2_PIN_M_TDD_TXD   GPIO_MODE_04
+ #define GPIO_UART_UTXD2_PIN_M_DBG_MON_B   GPIO_MODE_07
+ 
++/* D20: Q5 card-detect pad (blob msdc_enable_cd_irq @c04f0268 programs
++ * 0x80000003 mode0/dir0/out0; consumed by mmc-host/mt6582/sd.c). _M_EINT maps
++ * to mode 00 like every EINT-capable pad on MT6582 (see GPIO_ACCDET block). */
++#define GPIO_MSDC1_EINT_PIN         (GPIO3 | 0x80000000)
++#define GPIO_MSDC1_EINT_PIN_M_GPIO  GPIO_MODE_00
++#define GPIO_MSDC1_EINT_PIN_M_EINT  GPIO_MSDC1_EINT_PIN_M_GPIO
++
+ #define GPIO_MSDC1_CMD         (GPIO124 | 0x80000000)
+ #define GPIO_MSDC1_CMD_M_GPIO  GPIO_MODE_00
+ #define GPIO_MSDC1_CMD_M_MSDC1_CMD   GPIO_MODE_01
+
+--- a/arch/arm/mach-mt6582/q5/leds/mt65xx/cust_leds.c
++++ b/arch/arm/mach-mt6582/q5/leds/mt65xx/cust_leds.c
+@@ -111,13 +111,21 @@
+  *By default, clock_source = 0 and div = 0 => PWM freq. = 26 KHz 
+  *-------------------------------------------------------------------------------------------
+  */
++/* D20 (bob-m4 §3.2 row 4 — hygiene): the pinned Lithium blob's get_cust_led_list
++ * array (@0xc0b5fb7c, 32 B entries re-verified entry-by-entry in this session)
++ * carries MT65XX_LED_MODE_NONE, -1 for ALL six non-LCD entries (red/green/blue/
++ * jogball-backlight/keyboard-backlight/button-backlight) — the Q5 has no such
++ * LEDs. a106's lineage drove PMIC ISINK1/0/2 (sourcing current into unconnected
++ * outputs); ported to the vendor's NONE. The lcd-backlight entry stays
++ * byte-identical (mode 5 = MT65XX_LED_MODE_CUST_BLS_PWM,
++ * disp_bls_set_backlight == blob 0xc03a743c; backlight-PWM-support 256 == blob). */
+ static struct cust_mt65xx_led cust_led_list[MT65XX_LED_TYPE_TOTAL] = {
+-	{"red",               MT65XX_LED_MODE_PMIC, MT65XX_LED_PMIC_NLED_ISINK1,{0}},
+-	{"green",             MT65XX_LED_MODE_PMIC, MT65XX_LED_PMIC_NLED_ISINK0,{0}},
++	{"red",               MT65XX_LED_MODE_NONE, -1,{0}},
++	{"green",             MT65XX_LED_MODE_NONE, -1,{0}},
+ 	{"blue",              MT65XX_LED_MODE_NONE, -1,{0}},
+ 	{"jogball-backlight", MT65XX_LED_MODE_NONE, -1,{0}},
+ 	{"keyboard-backlight",MT65XX_LED_MODE_NONE, -1,{0}},
+-	{"button-backlight",  MT65XX_LED_MODE_PMIC, MT65XX_LED_PMIC_NLED_ISINK2,{0}},
++	{"button-backlight",  MT65XX_LED_MODE_NONE, -1,{0}},
+ 	{"lcd-backlight",     MT65XX_LED_MODE_CUST_BLS_PWM, (int)disp_bls_set_backlight,{0}},
+ };
+ 
+
+--- a/drivers/misc/mediatek/Makefile.custom
++++ b/drivers/misc/mediatek/Makefile.custom
+@@ -19,6 +19,18 @@
+ MTK_PROJECT_PATH_ROOT := $(srctree)/drivers/misc/mediatek/mach/$(MTK_PLATFORM)/$(ARCH_MTK_PROJECT)
+ endif
+ 
++# D20 (bob-m4 §3.2): include-precedence override. DrvGen regenerates the DCT
++# headers (cust_eint.h / cust_gpio_usage.h / cust_kpd.h / ...) from the
++# a106-provenanced codegen.dws into $(DRVGEN_OUT)/inc at EVERY build (archprepare
++# runs tools/dct/DrvGen; scripts/drvgen/drvgen.mk). Without the -I added below,
++# the O-dir copies shadow the source-tree headers (the only /inc dir before
++# D20), so editing arch/arm/mach-mt6582/q5/dct/dct/inc/*.h would be a silent
++# no-op. The D20-pinned Q5 board values live in those source headers; this
++# extra -I (placed BEFORE the $(DRVGEN_OUT)/inc line) makes them win include
++# precedence. Overriding headers: cust_eint.h, cust_gpio_usage.h, cust_kpd.h --
++# every other header still resolves from DrvGen and stays bit-identical to
++# today. build/62_kernel_delta_board.sh asserts the D20 constants AND proves
++# the precedence took effect on the compiled objects ( forge-m4-report ).
+ ccflags-y += -I$(MTK_PLATFORM_PATH_ROOT)/include \
+              -I$(MTK_PLATFORM_PATH_ROOT)/include/mach \
+              -I$(MTK_PROJECT_PATH_ROOT)/accdet \
+@@ -35,6 +47,7 @@
+              -I$(MTK_PROJECT_PATH_ROOT)/sound/inc \
+              -I$(MTK_PROJECT_PATH_ROOT)/touchpanel/ft5406_82 \
+              -I$(MTK_PROJECT_PATH_ROOT)/vibrator \
++             -I$(MTK_PROJECT_PATH_ROOT)/dct/dct/inc \
+ 	     -I$(DRVGEN_OUT)/inc \
+              -I$(MTK_PROJECT_PATH_ROOT)/multibridge/mt8193/inc 
+ 
+
+--- a/drivers/misc/mediatek/mmc-host/mt6582/sd.c
++++ b/drivers/misc/mediatek/mmc-host/mt6582/sd.c
+@@ -8565,6 +8565,17 @@
+     //struct msdc_hw *hw = host->hw;  // fixed build warning
+     if(enable){
+         if(host->id == 1 && (MSDC_SD == hw->host_function) && (hw->flags & MSDC_CD_PIN_EN)){
++            /* D20 (bob-m4 §3.2 row 1): the Q5 wires card-detect to GPIO3 and the
++             * vendor's msdc_enable_cd_irq repins that pad to plain-GPIO input
++             * right here (blob @c04f0268-84: mode 0 / dir 0 / out 0 on
++             * GPIO3|0x80000000, gated on the CD-wired hw->flags bit; the vendor's
++             * own registration follows on @c04f02fc). The a106 lineage left the
++             * pad to LK/DCT boot state; on the Q5 mirror the vendor so the EINT
++             * channel registered below (CUST_EINT_MSDC1_INS_NUM = 3) actually
++             * watches the card line. The vendor does not touch pull config. */
++            mt_set_gpio_mode(GPIO_MSDC1_EINT_PIN, GPIO_MSDC1_EINT_PIN_M_EINT);
++            mt_set_gpio_dir(GPIO_MSDC1_EINT_PIN, GPIO_DIR_IN);
++            mt_set_gpio_out(GPIO_MSDC1_EINT_PIN, GPIO_OUT_ZERO);
+ 
+             if(hw->cd_level)
+                 host->sd_cd_polarity = (~EINT_MSDC1_INS_POLARITY)&0x1;
