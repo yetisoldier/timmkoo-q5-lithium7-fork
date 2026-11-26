@@ -257,3 +257,51 @@ asserts each invariant and aborts on violation. Their deltas are *selections* an
   M4 `beta-touch-lcm-board` artifacts stay reproducible from the pre-D21
   history); `55_repack_boot.sh` tag `beta-touch-lcm-board2`; additive
   O-dir whitelist hygiene in 50/60/61. No defconfig changes.
+
+## D22 (input-path repairs — gsl_tp write contract + firmware loader + init
+## propagation + Q5 volume-key reversal)
+- Files: `drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c`,
+  `arch/arm/mach-mt6582/q5/dct/dct/inc/cust_kpd.h`. Everything else untouched
+  (the D17 firmware/key generation and GPIO/EINT wiring are pinned and
+  unmodified; build/63 re-asserts all D1…D21 invariants).
+- Defects were verified BEFORE patching (hera-d22-input-diagnosis §"Source root
+  defects", isolated host probes + kept reproducible in
+  `build/d22_host_tests/run.sh`):
+  1. `gsl_write_interface` treated its payload as a `[reg|value…]` buffer while
+     every caller passes payload-only data — first payload byte destroyed and
+     one byte read past the caller's buffer on EVERY I2C write (ASAN READ).
+  2. `gsl_load_fw` flushed on constant `send_flag == 1|0 % burst` comparisons —
+     only true after a u8 wrap (~256 records into a 129-byte buffer, ASAN
+     WRITE) — and wrote the page selector from stale buffer bytes.
+  3. `check_mem_data`/`gsl_load_fw`/`gsl_sw_init`/helpers discarded every
+     transfer/init failure; the probe bound unverified hardware.
+  4. Live PTY capture: physical VolumeUp emits KEY_VOLUMEDOWN under the D20 map
+     — the two active matrix slots are swapped on this board.
+- Repairs: payload-only const write path with a bounded staging buffer (exact
+  reg+num wire bytes, caller never mutated); `gsl_load_fw` as bounded
+  contiguous-register page-aware batches (≤ DMA_TRANS_LEN records = 128 B,
+  flush on full batch / page selector / discontinuity / end, explicit LE
+  words, signed return propagating every failed/short transfer incl. the final
+  partial batch); full failure propagation through the init path with a
+  bounded alive gate (reg 0xb0 byte0 == 0x5a, 3 tries @200 ms) before
+  `tpd_load_status = 1`; the two active keys reversed in `KPD_INIT_KEYMAP`.
+- Asserts (63, new O dir `build-beta-touch-lcm-board3`):
+  - host tests (ASAN, actual source extraction from the pre/post-patch
+    snapshots): old helpers abort with stack-buffer-overflow, repaired code
+    passes with payload immutability + exact byte streams; every Q5 firmware
+    array (GSL_TP_CHECK_FW + the 5 configs, all record counts) emits exactly
+    its records as page/data transfers; injected short/negative transports
+    propagate; init failure never reports success.
+  - source: staged write helper, no `buf[0] = reg` / `send_flag == … % …`
+    remnants, alive-gate tail in check_mem_data, D22 markers, reversed keymap
+    lines (+ explicit absence of the D20 map form), fw header still at the
+    D17 pin.
+  - compiled: `hal_kpd.o` bytes (115,114) — and NOT D20's (114,115) nor a106's
+    (0,115,114); `mtk_gslX680.o` carries the D22 marker rodata; shipped Image
+    carries `D22: init failed` + the alive-check log.
+- Pipeline: 63 builds the NEW O dir `build-beta-touch-lcm-board3`; the pinned
+  `beta-touch-lcm-board2` O dir + `out/boot-m1b-beta-touch-lcm-board2.img`
+  stay the immutable rollback/reference pair; `55_repack_boot.sh` tag
+  `beta-touch-lcm-board3`. No defconfig changes. HARDWARE GATES OPEN: real
+  swipe must emit event3 coordinates and work visually; BOTH volume
+  directions verified by hand; no crash/regression on boot.

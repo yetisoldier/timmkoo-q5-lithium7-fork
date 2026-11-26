@@ -1,0 +1,812 @@
+# D22 — the input-path repairs: gsl_tp I2C write contract + firmware loader +
+# init failure propagation + Q5 volume-key reversal.
+# Task (binding): .specs/hera-d22-input-diagnosis.md. Report:
+# .specs/forge-d22-input-report.md (host-test + build evidence).
+#
+# THE DEFECTS (each reproduced independently on the host before this patch —
+# hera-d22-input-diagnosis §"Source root defects"; the isolated probes
+# q5-gsl-write-asan / q5-gsl-fw-asan abort under ASAN against the UNPATCHED
+# function text, and build/d22_host_tests keeps reproducing them):
+#  1. gsl_write_interface consumed a [reg|payload] buffer (buf[0] = reg, wire
+#     len = num + 1) while EVERY caller (gsl_i2c_write_bytes, the firmware
+#     loader, all chip helpers) passes pure payloads: the first payload byte
+#     was destroyed and one byte was read past the caller's buffer on EVERY
+#     I2C write (host ASAN: stack-buffer-overflow READ). On the wire this
+#     means every register/command write carried wrong data + a trailing
+#     garbage byte.
+#  2. gsl_load_fw flushed on CONSTANT comparisons (`send_flag == 1 % burst`
+#     / `== 0 % burst`) that only became true after a u8 wrap (~256 records
+#     into a 129-byte staging buffer): cur ran past buf end (host ASAN:
+#     stack-buffer-overflow WRITE at the next-page memcpy) and the page
+#     selector was written from stale buffer bytes (cur never reset at page
+#     records). The Q5 arrays are page-aligned (0xf0 selector + 32 data
+#     records), so the real firmware download corrupted stack AND sent
+#     garbage page selectors.
+#  3. check_mem_data ignored the 0xb0 read result and the gsl_sw_init return
+#     and `return result` was hardcoded 0; gsl_sw_init/the chip helpers/
+#     gsl_load_fw/gsl_start_core discarded every transfer failure. The probe
+#     therefore registered tpd_load_status = 1 on a controller it never
+#     verified — a false-positive hardware success.
+#  4. Q5 volume keys: live PTY capture shows physical VolumeUp emitting
+#     KEY_VOLUMEDOWN under the D20 KPD_INIT_KEYMAP ({[0]=VOLDOWN,[1]=VOLUP}) —
+#     the two active matrix slots are wired one row-shifted on this board.
+#     The D22 contract reverses EXACTLY those two keys ([0]=VOLUP,
+#     [1]=VOLDOWN) in the Q5-pinned DCT header; KPD_DL_KEY*/MT65XX_RECOVERY_
+#     KEY (HW-keycode download/recovery contracts), the PMIC power key, the
+#     debounce and every other row stay untouched. build/63_kernel_delta_input
+#     .sh re-pins source + compiled (hal_kpd.o) state; the complementary
+#     VolumeDown direction remains a hardware gate after flash.
+#
+# THE REPAIRS (vendor behaviour byte-preserved unless the defect IS it):
+#  - gsl_write_interface: const payload + bounded staging buffer (≤128 B
+#    payload + reg), register byte first, exactly num+1 wire bytes, caller
+#    memory never mutated; MTK msg fields verbatim (addr mask + ENEXT, TEN
+#    flags, timing 400); short transfers -> -EFAULT, bad sizes -> -EINVAL.
+#  - gsl_i2c_write_bytes: payload-only contract (const), size-validated
+#    [1..128] — the dead chunk loop (and its u8-offset wrap class) is gone.
+#  - gsl_load_fw: bounded contiguous-register page-aware batches ≤
+#    DMA_TRANS_LEN records (128 payload bytes); flush on full batch / page
+#    selector / register discontinuity / end; page writes exactly reg 0xf0 +
+#    4 payload bytes; words staged explicit little-endian; EVERY record
+#    emitted exactly once in order incl. the final partial batch; signed
+#    return, all failed/short transfers propagate.
+#  - init path: check_mem_data propagates read + sw_init results; gsl_sw_init
+#    propagates test/clear/reset/io/load/start failures (canary transport
+#    failure falls straight to the required default load, which reports the
+#    same dying link loudly; an unanswered canary keeps the vendor's bounded
+#    3-try loop); after load/start a BOUNDED alive gate (reg 0xb0 byte0 ==
+#    0x5a, ≤3 reads @200 ms) decides success — probe binds only on a
+#    confirmed controller. Vendor delays, fingerprint selection, fw/tuning
+#    arrays, and the blob call sequence (incl. io_control×2) unchanged.
+#  - cust_kpd.h: the two active keys reversed per the live capture.
+#
+# TEST ARTIFACTS: build/d22_host_tests/run.sh extracts the OLD function text
+# from the pre-D22 tree snapshot and the NEW text from the tree after this
+# patch applies — REAL functions, not formulas — and proves: old helpers fail
+# under ASAN (both above), repaired ones pass ASAN with payload immutability
+# + exact byte streams, every extracted Q5 firmware array (CHECK_FW + 5
+# configs, ALL record counts) emits exactly its records as page/data
+# transfers (final partial batch, page transitions, discontinuities, full-
+# batch cap, injected short/negative transports), and init failure NEVER
+# reports success (bounded alive gate; transport/load/fingerprint failures
+# refuse the probe).
+# BUILD ARTIFACT (build/63_kernel_delta_input.sh): new O dir
+# build-beta-touch-lcm-board3 on top of D1…D21, D22 invariants re-pinned at
+# source level (incl. the reversed keymap so DrvGen regeneration cannot
+# revert it), hal_kpd.o compiled keymap gate {VOLUP,VOLDOWN} = (115, 114),
+# gsl .o carries the D22 rodata markers, D21 MBR gate re-asserted, board2
+# O dir + image untouched (rollback immutable pair).
+#
+---
+
+
+--- a/arch/arm/mach-mt6582/q5/dct/dct/inc/cust_kpd.h
++++ b/arch/arm/mach-mt6582/q5/dct/dct/inc/cust_kpd.h
+@@ -75,12 +75,22 @@
+ 
+ /* HW keycode [0 ~ 71] -> Linux keycode. D20: Q5 wiring per the pinned Lithium
+  * blob's compiled kpd_keymap @0xc08d0e34 ({[0]=VOLDOWN,[1]=VOLUP}); the a106
+- * lineage shifted the pair by one ([1]=VOLUP,[2]=VOLDOWN) — on the Q5 that would
+- * read the matrix pads one-off (VOL+/- never emitted). */
++ * lineage shifted the pair by one ([1]=VOLUP,[2]=VOLDOWN).
++ * D22 (hera-d22-input-diagnosis §4): live PTY capture (VolumeUp DOWN/UP
++ * emitting KEY_VOLUMEDOWN on the D20 map) proves the two active matrix slots
++ * are wired one row-shifted vs the blob donor unit on this board — physical
++ * VOL+ sits at hw slot [0] and VOL- at hw slot [1]. The D22 contract reverses
++ * EXACTLY those two active keys ([0]=VOLUMEUP, [1]=VOLUMEDOWN); nothing else
++ * moves (the KPD_DL_KEY1/2 and MT65XX_RECOVERY_KEY macros are HW-keycode
++ * download/recovery contracts, PMIC pwr key 8 and the debounce stay, no
++ * HOME/system layout change). build/63_kernel_delta_input.sh re-pins the
++ * reversed map at source and compiled (hal_kpd.o) level so DrvGen
++ * regeneration cannot revert it; the complementary VolumeDown direction must
++ * still be hardware-verified after flash. */
+ #define KPD_INIT_KEYMAP()	\
+ {	\
+-	[0] = KEY_VOLUMEDOWN,		\
+-	[1] = KEY_VOLUMEUP,		\
++	[0] = KEY_VOLUMEUP,		\
++	[1] = KEY_VOLUMEDOWN,		\
+ }	 
+ /*****************************************************************/
+ /*******************Preload Customation***************************/
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -36,6 +36,26 @@
+  *
+  * [BLOB] marks the sites adapted to the Q5's compiled driver behaviour.
+  *
++ * D22 (hera-d22-input-diagnosis) repairs the write/download path, keeping the
++ * D17 chip protocol byte-for-byte:
++ *  1. gsl_write_interface consumed a [reg|payload] buffer (buf[0] = reg, len =
++ *     num + 1) while every caller passes pure payloads — payload byte 0 was
++ *     destroyed and one byte read past the caller's buffer on EVERY write
++ *     (host ASAN proof). Now const-payload, staged into a bounded buffer,
++ *     sent register-first as exactly num+1 bytes; MTK msg flags/timing kept.
++ *  2. gsl_load_fw flushed on constant `send_flag == 1|0 % burst` compares —
++ *     only true after a u8 wrap (~256 records) — smashing the staging buffer
++ *     (host ASAN proof) and writing page selectors from stale bytes. Rewritten
++ *     as bounded contiguous-register page-aware batches (≤ DMA_TRANS_LEN
++ *     records = 128 payload bytes) flushing on full batch / page selector /
++ *     register discontinuity / end; explicit little-endian words; signed
++ *     return; every failed/short transfer propagated incl. the final batch.
++ *  3. The init path now propagates read/reset/load/start failures and probe
++ *     success is gated on a bounded reg-0xb0 alive check (0x5a). check_mem_data
++ *     and the firmware loader return real results — no unconditional success.
++ * Vendor behaviours preserved verbatim: delays, fingerprint selection and
++ * cascade, firmware/tuning arrays, message flags (addr mask, ENEXT, timing).
++ *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License as published by
+  * the Free Software Foundation; either version 2 of the License, or
+@@ -89,10 +109,20 @@
+  * name; the panel identity lives in GSLX680_NAME ("gsl_tp", blob-locked). */
+ #define MAX_FINGERS		10
+ #define MAX_CONTACTS		10
+-#define DMA_TRANS_LEN		0x20		/* max fw entries per page write burst */
++#define DMA_TRANS_LEN		0x20		/* max fw records per page write burst */
+ #define GSL_PAGE_REG		0xf0
+ #define GSL_REG_MEM_CHECK	0xb0		/* byte0==0x5a when firmware is alive [BLOB check_mem_data] */
+ #define GSL_REG_FINGERPRINT	0xb8		/* chip "SW/Sample firmware" fingerprint [BLOB gsl_sw_init] */
++/* D22: one i2c write = register byte + payload. The vendor mt6582 i2c core
++ * DMA-copies payloads > I2C_FIFO_SIZE internally, so a single transfer per
++ * helper call is exact; the payload bound is the fw loader's own batch cap.
++ * Nothing may be written past the caller's payload or mutate it (see
++ * gsl_write_interface / gsl_i2c_write_bytes below). */
++#define GSL_I2C_MAX_PAYLOAD	128		/* max payload bytes per i2c write */
++#define GSL_FW_RECORD_BYTES	4		/* each fw record is one LE32 word */
++#define GSL_FW_ALIVE_BYTE	0x5a		/* reg 0xb0 byte0 when firmware is alive */
++#define GSL_FW_ALIVE_TRIES	3		/* bounded post-load alive confirmation */
++#define GSL_FW_ALIVE_DELAY_MS	200		/* firmware boot time between reads */
+ #define CONFIG_LEN		31
+ #define GSL_CONFIG_DATA_SIZE	512		/* words per config's tuning buffer [BLOB +0x0c] */
+ #define GSL_CONFIG_PROC_FILE	"gsl_config"
+@@ -185,6 +215,7 @@
+ 
+ /* forward decls */
+ static int gsl_sw_init(struct i2c_client *client);
++static int gsl_check_alive(struct i2c_client *client);
+ static struct i2c_driver tpd_i2c_driver;
+ static u8 rs_value1;
+ 
+@@ -194,7 +225,7 @@
+  * caller-side dma buffers are required).                               */
+ /* ------------------------------------------------------------------ */
+ 
+-static u32 gsl_read_interface(struct i2c_client *client, u8 reg, u8 *buf, u32 num)
++static int gsl_read_interface(struct i2c_client *client, u8 reg, u8 *buf, u32 num)
+ {
+ 	struct i2c_msg xfer_msg[2];
+ 
+@@ -220,23 +251,42 @@
+ 	       == ARRAY_SIZE(xfer_msg) ? 0 : -EFAULT;
+ }
+ 
+-static u32 gsl_write_interface(struct i2c_client *client, const u8 reg, u8 *buf, u32 num)
++/* D22 repair (diagnosis §1): the donor helper consumed a [reg|payload] buffer
++ * (buf[0] = reg, transfer len = num + 1) but ALL callers — gsl_i2c_write_bytes
++ * and the firmware loader — pass pure payloads, so payload byte 0 was
++ * overwritten by the register and one byte was read past the caller's buffer
++ * on every write (isolated host ASAN proof). The payload is now const and is
++ * staged into a bounded buffer: register byte first, unchanged payload after,
++ * exactly num + 1 bytes on the wire, caller memory never touched or overrun.
++ * Vendor message spelling preserved verbatim (addr mask + ENEXT, TEN flags,
++ * timing 400). */
++static int gsl_write_interface(struct i2c_client *client, u8 reg,
++			       const u8 *payload, u16 num)
+ {
+ 	struct i2c_msg xfer_msg[1];
++	u8 staged[GSL_I2C_MAX_PAYLOAD + 1];
++
++	if (!payload || num < 1 || num > GSL_I2C_MAX_PAYLOAD) {
++		GSL_LOGE("write_interface: bad payload (num=%u)\n", num);
++		return -EINVAL;
++	}
+ 
+-	buf[0] = reg;
++	staged[0] = reg;
++	memcpy(&staged[1], payload, num);
+ 
+ 	xfer_msg[0].addr = (client->addr & I2C_MASK_FLAG) | I2C_ENEXT_FLAG;
+ 	xfer_msg[0].len = num + 1;
+ 	xfer_msg[0].flags = client->flags & I2C_M_TEN;
+-	xfer_msg[0].buf = buf;
++	xfer_msg[0].buf = staged;
+ 	xfer_msg[0].timing = 400;
+ 
+ 	return i2c_transfer(client->adapter, xfer_msg, 1) == 1 ? 0 : -EFAULT;
+ }
+ 
+-/* chunked register read/write (donor's gsl_i2c_read/write_bytes; chunk cap
+- * 128 B stays below the vendor i2c dma-buffer limit of 255 B) */
++/* register read/write (donor's gsl_i2c_read/write_bytes, payload-only
++ * contract; reads chunk at 128 B which stays below the vendor i2c dma-buffer
++ * limit of 255 B, writes are validated to a single ≤128 B payload so no
++ * chunk-offset arithmetic is needed) */
+ static s32 gsl_i2c_read_bytes(struct i2c_client *client, u8 addr, u8 *rxbuf, int len)
+ {
+ 	int left = len;
+@@ -260,30 +310,22 @@
+ 	return 0;
+ }
+ 
+-static s32 gsl_i2c_write_bytes(struct i2c_client *client, u8 addr, u8 *txbuf, int len)
++static s32 gsl_i2c_write_bytes(struct i2c_client *client, u8 addr, const u8 *txbuf, int len)
+ {
+-	int left = len;
+-	int write_len;
+-	u8 *wr_buf = txbuf;
+-	u8 offset = 0;
+-	u8 wr_addr = addr;
+ 	int ret;
+ 
+-	while (left > 0) {
+-		write_len = min_t(int, left, 128);
+-		ret = gsl_write_interface(client, wr_addr, wr_buf, write_len);
+-		if (ret < 0) {
+-			GSL_LOGE("i2c write failed @0x%02x\n", wr_addr);
+-			return -1;
+-		}
+-		offset += write_len;
+-		left -= write_len;
+-		if (left > 0) {
+-			wr_addr = addr + offset;
+-			wr_buf = txbuf + offset;
+-		}
++	/* D22: payload-only contract with validated size — callers never
++	 * reserve a register-prefix byte and never get mutated buffers. */
++	if (len < 1 || len > GSL_I2C_MAX_PAYLOAD) {
++		GSL_LOGE("i2c write aborted: payload len %d out of [1,%d]\n",
++			 len, GSL_I2C_MAX_PAYLOAD);
++		return -EINVAL;
+ 	}
+-	return 0;
++
++	ret = gsl_write_interface(client, addr, txbuf, (u16)len);
++	if (ret != 0)
++		GSL_LOGE("i2c write failed @0x%02x\n", addr);
++	return ret;
+ }
+ 
+ /* ------------------------------------------------------------------ */
+@@ -313,57 +355,90 @@
+ 	return result;
+ }
+ 
+-static void gsl_clear_reg(struct i2c_client *client)
++/* D22: every helper below gained a signed return; vendor delays kept on the
++ * success path, failures return immediately instead of piling writes onto a
++ * dead link. */
++static int gsl_clear_reg(struct i2c_client *client)
+ {
+ 	u8 write_buf[4] = {0};
++	int ret;
+ 
+ 	GSL_LOGF();
+ 
+ 	write_buf[0] = 0x88;
+-	gsl_i2c_write_bytes(client, 0xe0, &write_buf[0], 1);
++	ret = gsl_i2c_write_bytes(client, 0xe0, &write_buf[0], 1);
++	if (ret != 0) {
++		GSL_LOGE("clear_reg: 0xe0 reset write failed\n");
++		return ret;
++	}
+ 	msleep(20);
+ 
+ 	write_buf[0] = 0x03;
+-	gsl_i2c_write_bytes(client, 0x80, &write_buf[0], 1);
++	ret = gsl_i2c_write_bytes(client, 0x80, &write_buf[0], 1);
++	if (ret != 0) {
++		GSL_LOGE("clear_reg: 0x80 disable write failed\n");
++		return ret;
++	}
+ 	usleep_range(5000, 5100);
+ 
+ 	write_buf[0] = 0x04;
+-	gsl_i2c_write_bytes(client, 0xe4, &write_buf[0], 1);
++	ret = gsl_i2c_write_bytes(client, 0xe4, &write_buf[0], 1);
++	if (ret != 0) {
++		GSL_LOGE("clear_reg: 0xe4 clock write failed\n");
++		return ret;
++	}
+ 	usleep_range(5000, 5100);
+ 
+ 	write_buf[0] = 0x00;
+-	gsl_i2c_write_bytes(client, 0xe0, &write_buf[0], 1);
++	ret = gsl_i2c_write_bytes(client, 0xe0, &write_buf[0], 1);
++	if (ret != 0) {
++		GSL_LOGE("clear_reg: 0xe0 restart write failed\n");
++		return ret;
++	}
+ 	msleep(20);
++
++	return 0;
+ }
+ 
+ static int gsl_reset_core(struct i2c_client *client)
+ {
+ 	u8 write_buf[4] = {0};
+-	int ret = 0;
++	int ret;
+ 
+ 	write_buf[0] = 0x88;
+ 	ret = gsl_i2c_write_bytes(client, 0xe0, &write_buf[0], 1);
++	if (ret != 0) {
++		GSL_LOGE("reset_core: 0xe0 reset write failed\n");
++		return ret;
++	}
+ 	msleep(20);
+ 
+ 	write_buf[0] = 0x04;
+-	ret += gsl_i2c_write_bytes(client, 0xe4, &write_buf[0], 1);
++	ret = gsl_i2c_write_bytes(client, 0xe4, &write_buf[0], 1);
++	if (ret != 0) {
++		GSL_LOGE("reset_core: 0xe4 clock write failed\n");
++		return ret;
++	}
+ 	usleep_range(10000, 11000);
+ 
+ 	write_buf[0] = 0x00;
+ 	write_buf[1] = 0x00;
+ 	write_buf[2] = 0x00;
+ 	write_buf[3] = 0x00;
+-	ret += gsl_i2c_write_bytes(client, 0xbc, write_buf, 4);
++	ret = gsl_i2c_write_bytes(client, 0xbc, write_buf, 4);
++	if (ret != 0) {
++		GSL_LOGE("reset_core: 0xbc power write failed\n");
++		return ret;
++	}
+ 	usleep_range(10000, 11000);
+ 
+-	if (ret < 0)
+-		GSL_LOGE("reset_core fail!\n");
+-	return ret;
++	return 0;
+ }
+ 
+-static void gsl_io_control(struct i2c_client *client)
++static int gsl_io_control(struct i2c_client *client)
+ {
+ 	u8 buf[4] = {0};
++	int ret;
+ 	int i;
+ 
+ 	for (i = 0; i < 5; i++) {
+@@ -371,77 +446,206 @@
+ 		buf[1] = 0;
+ 		buf[2] = 0xfe;
+ 		buf[3] = 0x1;
+-		gsl_i2c_write_bytes(client, 0xf0, buf, 4);
++		ret = gsl_i2c_write_bytes(client, 0xf0, buf, 4);
++		if (ret != 0) {
++			GSL_LOGE("io_control: 0xf0 page write failed\n");
++			return ret;
++		}
+ 		buf[0] = 0x5;
+ 		buf[1] = 0;
+ 		buf[2] = 0;
+ 		buf[3] = 0x80;
+-		gsl_i2c_write_bytes(client, 0x78, buf, 4);
++		ret = gsl_i2c_write_bytes(client, 0x78, buf, 4);
++		if (ret != 0) {
++			GSL_LOGE("io_control: 0x78 mode write failed\n");
++			return ret;
++		}
+ 		usleep_range(5000, 5100);
+ 	}
+ 	msleep(50);
++
++	return 0;
+ }
+ 
+ /* [BLOB gsl_start_core @c034c7d0] 4-byte zero write to 0xe0, then
+  * gsl_DataInit on the active config's tuning words (no sleeps at all). */
+-static void gsl_start_core(struct i2c_client *client)
++static int gsl_start_core(struct i2c_client *client)
+ {
+ 	u8 write_buf[4] = {0};
++	int ret;
+ 
+-	gsl_i2c_write_bytes(client, 0xe0, write_buf, 4);
++	ret = gsl_i2c_write_bytes(client, 0xe0, write_buf, 4);
++	if (ret != 0) {
++		GSL_LOGE("start_core: 0xe0 run write failed\n");
++		return ret;
++	}
+ #ifdef GSL_NOID_VERSION
+ 	gsl_DataInit(gsl_cfg_data());
+ #endif
++	return 0;
++}
++
++/* D22: explicit little-endian word — firmware records are LE32 words, never
++ * relying on the host byte order. */
++static void gsl_fw_word_le(u8 *dst, u32 val)
++{
++	dst[0] = (u8)(val & 0xff);
++	dst[1] = (u8)((val >> 8) & 0xff);
++	dst[2] = (u8)((val >> 16) & 0xff);
++	dst[3] = (u8)((val >> 24) & 0xff);
+ }
+ 
+-/* [donor gsl_load_fw re-parametrised like the blob: (client, fw, count)] */
+-static void gsl_load_fw(struct i2c_client *client, const struct fw_data *fw, u32 count)
++/* send one accumulated data batch: contiguous registers run from start_reg,
++ * payload already LE-staged (≤ DMA_TRANS_LEN records = 128 bytes) */
++static int gsl_fw_flush_batch(struct i2c_client *client, u32 start_reg,
++			      const u8 *payload, u32 records)
+ {
+-	u8 buf[DMA_TRANS_LEN * 4 + 1] = {0};
+-	u8 send_flag = 1;
+-	u8 *cur = buf + 1;
+-	u32 source_line;
+-	const u32 burst = DMA_TRANS_LEN < 0x20 ? DMA_TRANS_LEN : 0x20;
+-
+-	for (source_line = 0; source_line < count; source_line++) {
+-		/* init page trans, set the page val */
+-		if (fw[source_line].offset == GSL_PAGE_REG) {
+-			memcpy(cur, &fw[source_line].val, 4);
+-			gsl_write_interface(client, GSL_PAGE_REG, buf, 4);
+-			send_flag = 1;
+-		} else {
+-			if (send_flag == 1 % burst)
+-				buf[0] = (u8)fw[source_line].offset;
++	int ret;
++
++	ret = gsl_write_interface(client, (u8)start_reg, payload,
++				  (u16)(records * GSL_FW_RECORD_BYTES));
++	if (ret != 0)
++		GSL_LOGE("fw load: data batch @reg 0x%02x (%u records) failed\n",
++			 (u32)(start_reg & 0xff), records);
++	return ret;
++}
+ 
+-			memcpy(cur, &fw[source_line].val, 4);
+-			cur += 4;
++/* D22 repair (diagnosis §2): the donor batcher flushed on
++ * `send_flag == 1 % burst` / `send_flag == 0 % burst` — constant comparisons
++ * that could only be true after a u8 wrap (~256 records into a 129-byte
++ * buffer, host ASAN stack-buffer-overflow WRITE) — and the page
++ * selector copy happened at the stale `cur` offset. Rewritten as bounded
++ * contiguous-register page-aware batches: every 0xf0 record is a standalone
++ * page-selector write (reg 0xf0 + one LE32 payload word, flush-before-switch),
++ * data records accumulate while the register address stays contiguous
++ * (start + 4·n) and the batch holds at most DMA_TRANS_LEN records (128
++ * payload bytes), flushing on full batch / register discontinuity / page
++ * switch / end of array. Every record is emitted exactly once, in order,
++ * values explicit little-endian, and the final partial batch is flushed and
++ * checked like any other transfer. Returns 0 only when every page and data
++ * write succeeded; the caller (gsl_sw_init) must abort the init on error. */
++static int gsl_load_fw(struct i2c_client *client, const struct fw_data *fw, u32 count)
++{
++	u8 payload[DMA_TRANS_LEN * GSL_FW_RECORD_BYTES];	/* ≤ 128 bytes */
++	u32 i = 0;
++	u32 batch_start = 0;
++	u32 batch_records = 0;
++	u8 word[GSL_FW_RECORD_BYTES];
++	int ret = 0;
++
++	GSL_LOGD("===gsl_load_fw start (%u records)===\n", count);
++
++	while (i < count) {
++		u32 reg = fw[i].offset;
+ 
+-			if (send_flag == 0 % burst) {
+-				gsl_write_interface(client, buf[0], buf, cur - buf - 1);
+-				cur = buf + 1;
++		if (reg == GSL_PAGE_REG) {
++			/* page selector: flush any open batch, then send
++			 * exactly reg 0xf0 + the 4 LE payload bytes */
++			if (batch_records != 0) {
++				ret = gsl_fw_flush_batch(client, batch_start, payload, batch_records);
++				if (ret != 0)
++					return ret;
++				batch_records = 0;
+ 			}
++			gsl_fw_word_le(word, fw[i].val);
++			ret = gsl_write_interface(client, (u8)GSL_PAGE_REG, word, GSL_FW_RECORD_BYTES);
++			if (ret != 0) {
++				GSL_LOGE("fw load: page selector write 0x%08x failed\n", fw[i].val);
++				return ret;
++			}
++			i++;
++			continue;
++		}
+ 
+-			send_flag++;
++		if (batch_records != 0 &&
++		    (batch_records >= (u32)DMA_TRANS_LEN ||
++		     reg != batch_start + batch_records * GSL_FW_RECORD_BYTES)) {
++			/* batch full or register discontinuity: flush and restart */
++			ret = gsl_fw_flush_batch(client, batch_start, payload, batch_records);
++			if (ret != 0)
++				return ret;
++			batch_records = 0;
+ 		}
++		if (batch_records == 0)
++			batch_start = reg;
++
++		gsl_fw_word_le(&payload[batch_records * GSL_FW_RECORD_BYTES], fw[i].val);
++		batch_records++;
++		i++;
++	}
++
++	/* final partial batch must flush and propagate like every other write */
++	if (batch_records != 0) {
++		ret = gsl_fw_flush_batch(client, batch_start, payload, batch_records);
++		if (ret != 0)
++			return ret;
+ 	}
++
++	GSL_LOGD("===gsl_load_fw end===\n");
++	return ret;
+ }
+ 
+ /* [BLOB check_mem_data] reads reg 0xb0; byte 0 == 0x5a means firmware alive,
+- * anything else schedules the full sw_init (fingerprint autodetect). */
++ * anything else schedules the full sw_init (fingerprint autodetect).
++ * D22: the read result and the init result are real values — the donor/old
++ * path returned success unconditionally (diagnosis §3); the probe must only
++ * bind a controller it can actually confirm. */
+ static int check_mem_data(struct i2c_client *client)
+ {
+ 	u8 read_buf[4] = {0};
+-	int result = 0;
++	int ret;
+ 
+ 	GSL_LOGF();
+ 
+-	gsl_i2c_read_bytes(client, GSL_REG_MEM_CHECK, read_buf, sizeof(read_buf));
+-	if (read_buf[0] != 0x5a) {
+-		GSL_LOGD("mem check %02x%02x%02x%02x != alive — full init\n",
+-			 read_buf[0], read_buf[1], read_buf[2], read_buf[3]);
+-		gsl_sw_init(client);
++	ret = gsl_i2c_read_bytes(client, GSL_REG_MEM_CHECK, read_buf, sizeof(read_buf));
++	if (ret != 0) {
++		GSL_LOGE("mem check: read 0x%02x failed (%d)\n", GSL_REG_MEM_CHECK, ret);
++		return ret;
+ 	}
+-	return result;
++
++	if (read_buf[0] == GSL_FW_ALIVE_BYTE)
++		return 0;
++
++	GSL_LOGD("mem check %02x%02x%02x%02x != alive — full init\n",
++		 read_buf[0], read_buf[1], read_buf[2], read_buf[3]);
++
++	ret = gsl_sw_init(client);
++	if (ret != 0) {
++		GSL_LOGE("sw_init failed (%d)\n", ret);
++		return ret;
++	}
++
++	/* D22: after load/start, a bounded alive confirmation — only a
++	 * controller that reports the expected signature ends init. */
++	return gsl_check_alive(client);
++}
++
++/* D22: bounded alive check of reg 0xb0 (diagnosis §3 "bounded alive check of
++ * reg b0"): the firmware needs a moment to boot after gsl_start_core, so a
++ * failed signature is retried at fixed delay up to GSL_FW_ALIVE_TRIES times
++ * — a bounded probe, no unbounded wait. Transport failures return directly
++ * (a NAK will not recover inside msleep). */
++static int gsl_check_alive(struct i2c_client *client)
++{
++	u8 read_buf[4] = {0};
++	int tries = GSL_FW_ALIVE_TRIES;
++	int ret;
++
++	while (tries-- > 0) {
++		ret = gsl_i2c_read_bytes(client, GSL_REG_MEM_CHECK, read_buf, sizeof(read_buf));
++		if (ret != 0) {
++			GSL_LOGE("alive check: read 0x%02x failed (%d)\n", GSL_REG_MEM_CHECK, ret);
++			return ret;
++		}
++		if (read_buf[0] == GSL_FW_ALIVE_BYTE)
++			return 0;
++		if (tries > 0)
++			msleep(GSL_FW_ALIVE_DELAY_MS);
++	}
++
++	GSL_LOGE("alive check: reg 0x%02x signature 0x%02x != 0x%02x after %d read(s)\n",
++		 GSL_REG_MEM_CHECK, read_buf[0], GSL_FW_ALIVE_BYTE, GSL_FW_ALIVE_TRIES);
++	return -EIO;
+ }
+ 
+ /* ------------------------------------------------------------------ */
+@@ -470,6 +674,7 @@
+ 	u32 fingerprint;
+ 	int score[6];
+ 	int try_count;
++	int ret;
+ 	int i, best;
+ 	const struct gsl_cfg_config *cfg;
+ 
+@@ -484,22 +689,39 @@
+ 	mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ONE);
+ 	msleep(20);
+ 
+-	/* 2. link test */
+-	if (gsl_test_i2c(client) < 0) {
+-		GSL_LOGE("gsl_test_i2c failed\n");
+-		return -1;
++	/* 2. link test — D22: propagate the exact failure */
++	ret = gsl_test_i2c(client);
++	if (ret != 0) {
++		GSL_LOGE("gsl_test_i2c failed (%d)\n", ret);
++		return ret;
+ 	}
+ 
+-	/* 3. check-firmware canary stage */
++	/* 3. check-firmware canary stage. D22: the stage's write/read results
++	 * are real now — a transport failure falls straight through to the
++	 * required default-firmware load below, which reports the same dying
++	 * link loudly (no silent success); an unanswered canary keeps the
++	 * vendor's bounded 3-try loop. */
+ 	if (gsl_dev.config_id == 0) {
+ 		try_count = 3;
+ 		while (try_count--) {
+-			gsl_clear_reg(client);
+-			gsl_reset_core(client);
+-			gsl_load_fw(client, GSL_TP_CHECK_FW, ARRAY_SIZE(GSL_TP_CHECK_FW));
+-			gsl_start_core(client);
++			ret = gsl_clear_reg(client);
++			if (ret == 0)
++				ret = gsl_reset_core(client);
++			if (ret == 0)
++				ret = gsl_load_fw(client, GSL_TP_CHECK_FW,
++						  ARRAY_SIZE(GSL_TP_CHECK_FW));
++			if (ret == 0)
++				ret = gsl_start_core(client);
++			if (ret != 0) {
++				GSL_LOGE("canary stage transport failed (%d) — default load\n", ret);
++				goto load_cfg;
++			}
+ 			msleep(200);
+-			gsl_i2c_read_bytes(client, 0xb4, buf, sizeof(buf));
++			ret = gsl_i2c_read_bytes(client, 0xb4, buf, sizeof(buf));
++			if (ret != 0) {
++				GSL_LOGE("canary state read failed (%d) — default load\n", ret);
++				goto load_cfg;
++			}
+ 			if ((buf[2] | (buf[3] << 8)) > 1)
+ 				break;		/* canary answered */
+ 			GSL_LOGD("canary not answered, %d tries left\n", try_count);
+@@ -512,10 +734,14 @@
+ 
+ 	/* 4. fingerprint autodetect [BLOB: msleep(20) + read 0xb8 + 6 popcounts] */
+ 	msleep(20);
+-	gsl_i2c_read_bytes(client, GSL_REG_FINGERPRINT, buf, sizeof(buf));
++	ret = gsl_i2c_read_bytes(client, GSL_REG_FINGERPRINT, buf, sizeof(buf));
++	if (ret != 0) {
++		GSL_LOGE("fingerprint read 0x%02x failed (%d)\n", GSL_REG_FINGERPRINT, ret);
++		return ret;
++	}
+ 	fingerprint = buf[0] | (buf[1] << 8) | (buf[2] << 16) | ((u32)buf[3] << 24);
+ 	printk(TPD_DEVICE ": the test 0xb8 = {0x%02x%02x%02x%02x}\n",
+-	       buf[0], buf[1], buf[2], buf[3]);
++		buf[0], buf[1], buf[2], buf[3]);
+ 
+ 	for (i = 0; i < 6; i++) {
+ 		score[i] = 100 * hweight32(gsl_fp_table[i] & ~fingerprint)
+@@ -557,14 +783,25 @@
+ 		break;
+ 	}
+ 
+-	/* 5. download the selected firmware (blob order incl. io_control×2) */
++	/* 5. download the selected firmware (blob order incl. io_control×2).
++	 * D22: every stage propagates — a failed/short transfer aborts init
++	 * with the error instead of claiming success. */
+ 	cfg = &gsl_cfg_table[gsl_dev.config_id % 5];
+-	gsl_clear_reg(client);
+-	gsl_reset_core(client);
+-	gsl_io_control(client);
+-	gsl_load_fw(client, cfg->fw, cfg->fw_size);
+-	gsl_io_control(client);
+-	gsl_start_core(client);
++	ret = gsl_clear_reg(client);
++	if (ret == 0)
++		ret = gsl_reset_core(client);
++	if (ret == 0)
++		ret = gsl_io_control(client);
++	if (ret == 0)
++		ret = gsl_load_fw(client, cfg->fw, cfg->fw_size);
++	if (ret == 0)
++		ret = gsl_io_control(client);
++	if (ret == 0)
++		ret = gsl_start_core(client);
++	if (ret != 0) {
++		GSL_LOGE("D22: fw load failed, config %d (err %d)\n", gsl_dev.config_id, ret);
++		return ret;
++	}
+ 
+ 	printk(TPD_DEVICE ": gsl_sw_init done, config %d\n", gsl_dev.config_id);
+ 	return 0;
+@@ -759,6 +996,7 @@
+ 	u8 buf[8] = {0};
+ 	char temp_buf[CONFIG_LEN + 1];
+ 	char *path_buf;
++	int proc_ret;
+ 	int tmp;
+ 	int tmp1;
+ 
+@@ -792,18 +1030,26 @@
+ 	if ('v' == temp_buf[0] && 's' == temp_buf[1]) {
+ 		memcpy(gsl_read, temp_buf, 4);
+ 	} else if ('s' == temp_buf[0] && 't' == temp_buf[1]) {
++		proc_ret = gsl_reset_core(gsl_dev.client);
++		if (proc_ret != 0)
++			GSL_LOGE("proc st: reset_core failed (%d)\n", proc_ret);
+ 		gsl_proc_flag = 1;
+-		gsl_reset_core(gsl_dev.client);
+ 	} else if ('e' == temp_buf[0] && 'n' == temp_buf[1]) {
+ 		msleep(20);
+-		gsl_reset_core(gsl_dev.client);
+-		gsl_start_core(gsl_dev.client);
++		proc_ret = gsl_reset_core(gsl_dev.client);
++		if (proc_ret != 0)
++			GSL_LOGE("proc en: reset_core failed (%d)\n", proc_ret);
++		proc_ret = gsl_start_core(gsl_dev.client);
++		if (proc_ret != 0)
++			GSL_LOGE("proc en: start_core failed (%d)\n", proc_ret);
+ 		gsl_proc_flag = 0;
+ 	} else if ('r' == temp_buf[0] && 'e' == temp_buf[1]) {
+ 		memcpy(gsl_read, temp_buf, 4);
+ 		memcpy(gsl_data_proc, buf, 8);
+ 	} else if ('w' == temp_buf[0] && 'r' == temp_buf[1]) {
+-		gsl_i2c_write_bytes(gsl_dev.client, buf[4], buf, 4);
++		proc_ret = gsl_i2c_write_bytes(gsl_dev.client, buf[4], buf, 4);
++		if (proc_ret != 0)
++			GSL_LOGE("proc wr: write @0x%02x failed (%d)\n", buf[4], proc_ret);
+ 	} else if ('i' == temp_buf[0] && 'd' == temp_buf[1]) {
+ 		/* [BLOB semantics] write the active config's tuning words */
+ 		tmp1 = (buf[7] << 24) | (buf[6] << 16) | (buf[5] << 8) | buf[4];
+@@ -913,6 +1159,7 @@
+ static void tpd_resume(struct early_suspend *h)
+ {
+ 	struct i2c_client *client = gsl_dev.client;
++	int ret;
+ 
+ 	if (gsl_dev.halt == 0) {
+ 		GSL_LOGD("already in resumed status\n");
+@@ -922,10 +1169,19 @@
+ 
+ 	mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ONE);
+ 	msleep(20);
+-	gsl_reset_core(client);
+-	gsl_start_core(client);
++	/* D22: the resume stages propagate — earlysuspend hooks are void, so
++	 * failures are loud in the log (the next check_mem_data alive gate
++	 * decides whether the panel is actually usable). */
++	ret = gsl_reset_core(client);
++	if (ret != 0)
++		GSL_LOGE("resume: reset_core failed (%d)\n", ret);
++	ret = gsl_start_core(client);
++	if (ret != 0)
++		GSL_LOGE("resume: start_core failed (%d)\n", ret);
+ 	msleep(20);
+-	check_mem_data(client);
++	ret = check_mem_data(client);
++	if (ret != 0)
++		GSL_LOGE("D22: resume init failed (%d)\n", ret);
+ 
+ 	mt_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM);
+ }
+@@ -942,11 +1198,14 @@
+ 	i2c_client = client;
+ 	gsl_dev.client = client;
+ 
+-	/* bring the controller up (cold start runs the fingerprint autodetect) */
++	/* bring the controller up (cold start runs the fingerprint autodetect).
++	 * D22: check_mem_data returns real results now — probe only binds
++	 * after the bounded alive confirmation passed (tpd_load_status stays
++	 * 0 otherwise, and tpd_local_init unregisters the driver). */
+ 	ret = check_mem_data(client);
+-	if (ret < 0) {
+-		GSL_LOGE("Failed to init chip!\n");
+-		return -1;
++	if (ret != 0) {
++		GSL_LOGE("D22: init failed (%d), touch probe aborted\n", ret);
++		return ret;
+ 	}
+ 
+ 	gsl_eint_register();

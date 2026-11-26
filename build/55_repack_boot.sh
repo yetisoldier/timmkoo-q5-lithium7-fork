@@ -7,7 +7,7 @@
 # The boot.img header carries Lithium's exact args (boot.img-args.txt / §4.1.3) and is
 # verified field-by-field against the donor after packing.
 #
-# Usage: 55_repack_boot.sh alpha|beta|beta-touch|beta-touch-lcm|beta-touch-lcm-board|beta-touch-lcm-board2|lithium-ctl [--debug-cmdline]
+# Usage: 55_repack_boot.sh alpha|beta|beta-touch|beta-touch-lcm|beta-touch-lcm-board|beta-touch-lcm-board2|beta-touch-lcm-board3|beta-touch-lcm-board4|lithium-ctl [--debug-cmdline]
 #   alpha       → BUILD_ALPHA/arch/arm/boot/zImage        → out/boot-m1b-alpha.img
 #   beta        → BUILD_BETA/arch/arm/boot/zImage         → out/boot-m1b-beta.img
 #   beta-touch  → build-beta-touch/arch/arm/boot/zImage   → out/boot-m1b-beta-touch.img  (D17)
@@ -16,6 +16,8 @@
 #                 → out/boot-m1b-beta-touch-lcm-board.img  (D19+D20, the M4 verdict image)
 #   beta-touch-lcm-board2 → build-beta-touch-lcm-board2/.../zImage
 #                 → out/boot-m1b-beta-touch-lcm-board2.img  (D21 MBR panic fix, the M5 verdict image)
+#   beta-touch-lcm-board3 → build-beta-touch-lcm-board3/.../zImage
+#                 → out/boot-m1b-beta-touch-lcm-board3.img  (D22 input repairs, the D22 verdict image)
 #   lithium-ctl → the PINNED donor's kernel payload, verbatim (no build needed)
 #                 → out/boot-m1b-lithium-ctl.img; must be byte-identical to the
 #                 donor boot.img (T0 repack-control, bob-m3-boot-debug §5).
@@ -33,16 +35,19 @@ source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/40_kernel_env.sh"
 require_tools python3 sha256sum stat
 # --debug-cmdline (§5.4 UART/ram-console evidence capture aid). OFF by default;
 # every default path below is identical to its pre-M3 behaviour.
-DEBUG_CMDLINE_SUFFIX="console=ttyMT3,921600n1 initcall_debug printk.time=1"
+# Environment override lets a diagnostic run append extra params (e.g.
+# log_buf_len=4M so boot-time driver messages survive until adb is up)
+# while every default path stays byte-identical.
+DEBUG_CMDLINE_SUFFIX="${DEBUG_CMDLINE_SUFFIX_OVERRIDE:-console=ttyMT3,921600n1 initcall_debug printk.time=1}"
 DEBUG_CMDLINE_MODE=0
 if [ "${2:-}" = "--debug-cmdline" ]; then
   DEBUG_CMDLINE_MODE=1
 elif [ "${2:-}" != "" ] || [ $# -gt 2 ]; then
-  usage="usage: 55_repack_boot.sh alpha|beta|beta-touch|beta-touch-lcm|beta-touch-lcm-board|beta-touch-lcm-board2|lithium-ctl [--debug-cmdline]"
+  usage="usage: 55_repack_boot.sh alpha|beta|beta-touch|beta-touch-lcm|beta-touch-lcm-board|beta-touch-lcm-board2|beta-touch-lcm-board3|beta-touch-lcm-board4|lithium-ctl [--debug-cmdline]"
   echo "${usage}" >&2
   exit 64
 fi
-[ $# -le 2 ] || { usage="usage: 55_repack_boot.sh alpha|beta|beta-touch|beta-touch-lcm|beta-touch-lcm-board|beta-touch-lcm-board2|lithium-ctl [--debug-cmdline]"; echo "${usage}" >&2; exit 64; }
+[ $# -le 2 ] || { usage="usage: 55_repack_boot.sh alpha|beta|beta-touch|beta-touch-lcm|beta-touch-lcm-board|beta-touch-lcm-board2|beta-touch-lcm-board3|beta-touch-lcm-board4|lithium-ctl [--debug-cmdline]"; echo "${usage}" >&2; exit 64; }
 TAG="${1:-}"
 case "${TAG}" in
   alpha) ZIMAGE="${BUILD_ALPHA}/arch/arm/boot/zImage" ;;
@@ -51,8 +56,10 @@ case "${TAG}" in
   beta-touch-lcm) ZIMAGE="${KDIR}/build-beta-touch-lcm/arch/arm/boot/zImage" ;;
   beta-touch-lcm-board) ZIMAGE="${KDIR}/build-beta-touch-lcm-board/arch/arm/boot/zImage" ;;
   beta-touch-lcm-board2) ZIMAGE="${KDIR}/build-beta-touch-lcm-board2/arch/arm/boot/zImage" ;;
+  beta-touch-lcm-board3) ZIMAGE="${KDIR}/build-beta-touch-lcm-board3/arch/arm/boot/zImage" ;;
+  beta-touch-lcm-board4) ZIMAGE="${KDIR}/build-beta-touch-lcm-board4/arch/arm/boot/zImage" ;;
   lithium-ctl) ZIMAGE="" ;;  # donor kernel payload, extracted verbatim below (T0)
-  *) die "tag must be 'alpha', 'beta', 'beta-touch', 'beta-touch-lcm', 'beta-touch-lcm-board', 'beta-touch-lcm-board2' or 'lithium-ctl'" ;;
+  *) die "tag must be 'alpha', 'beta', 'beta-touch', 'beta-touch-lcm', 'beta-touch-lcm-board', 'beta-touch-lcm-board2', 'beta-touch-lcm-board3' or 'lithium-ctl'" ;;
 esac
 if [ "${TAG}" = "lithium-ctl" ]; then
   if [ "${DEBUG_CMDLINE_MODE}" -ne 0 ]; then
