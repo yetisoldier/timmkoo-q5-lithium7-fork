@@ -1,0 +1,164 @@
+# D19 - DRAFT, NOT APPLIED TO THE TREE, NOT COMPILED, NOT FLASHED.
+#
+# bob-m3-boot-debug SS6.3: Forge prepared this hardening patch so it is ready
+# the moment evidence names a branch. Bob lands it ON HIS OWN COMMIT GATE
+# (SS4 "cross-cutting hardening"): after the T0 repack-control and T1 alpha
+# evidence exist, never before - an unneeded patch on an unproven base is how
+# bisects get confused. Applies with the usual pipeline model
+# (patch -p1 from kernel-3.10/, D-order after D18).
+#
+# WHAT (exactly SS4's list):
+#   drivers/misc/mediatek/video/mt6582/dsi_drv.c  (kernel build compiles the
+#   ENABLE_DSI_INTERRUPT=1 variant, dsi_drv.c:1-7):
+#
+#   1. four timeout-free engine polls in DSI_Detect_CLK_Glitch_Default():
+#        line 1606  while(DSI_REG->DSI_INTSTA.BUSY);
+#        line 1619  while(DSI_REG->DSI_INTSTA.CMD_DONE == 0);   (te-off step)
+#        line 1629  while(DSI_REG->DSI_INTSTA.CMD_DONE == 0);   (0xFF unlock step)
+#        line 1639  while((INREG32(&DSI_STATE_DBG0)&0x1) == 0); (bit0 poll)
+#      each re-written with the sibling 100 ms budget that DSI_WaitForTE /
+#      DSI_WaitBtaTE already use in this same file (dsi_current_time /
+#      get_current_time_us pattern at 1387-1402, 1419-1434, 1484+): spin may
+#      at most 100 ms, then WARN + break. Engine-poll behaviour otherwise
+#      unchanged. The "(D19: 100ms budget)" strings make each changed wait
+#      self-identifying in UART / ram-console logs (SS5.4 captures).
+#
+#   2. _WaitForEngineNotBusy() (576-588, the process-context arm of the
+#      ENABLE_DSI_INTERRUPT=1 build): after the 2 s
+#      wait_event_interruptible_timeout expires the arm must BREAK. The old
+#      code Dump+Reset then re-armed the same wait endlessly whenever
+#      BUSY||CMD_DONE never cleared - an infinite 2 s-cadence wait inside
+#      mtkfb_probe: the exact "silent hang at the LK logo, no reset" symptom
+#      (SS1; other CPUs still pat the watchdog). Bounded now: one Dump+Reset
+#      try, then the caller proceeds and the failure becomes diagnosable
+#      (dark boot with adb up, or panic with its visible reset).
+#
+# REACHABILITY NUANCE (SS3.4 context; keep for the landing review):
+#   * The 576 break is on the LIVE boot path (mtkfb_probe/DSI_set_cmdq/
+#     DSI_transfer -> _WaitForEngineNotBusy) for every alpha/beta image.
+#   * The four glitch polls are gated by dsi_glitch_enable (dsi_drv.c:168,
+#     default false); the only enabler in this tree is COMMENTED OUT
+#     (disp_drv_dsi.c:141). They are hardening for the autodetect/glitch path
+#     the day it gets re-enabled - and for the LK-name-miss autodetect flow,
+#     whose compare_id reads run through dsi_drv.c's read path (residuals
+#     below), not through these four lines. This is risk-reduction
+#     instrumentation exactly as SS4 scoped it; it is NOT a claim that
+#     glitch-detect currently runs at boot.
+#
+# RESIDUAL UNBOUNDED WAITS found while auditing the same file but LEFT OUT of
+# this draft (same 100 ms budget can be applied later; extend D19 or a new
+# D-id strictly on Bob's sign-off - do not shotgun):
+#   * dsi_drv.c:1649  STATE_DBG0 bit18 poll, same Default loop as 1639
+#   * dsi_drv.c:1819 + 1901  DSI_Detect_CLK_Glitch_Parallel() BUSY / CMD_DONE
+#   * dsi_drv.c:4043  DSI_dcs_read_lcm_reg_v2() RACK "do{...}while(BUSY)"
+#     (interrupt build - this IS on the live autodetect read path for the
+#     alpha/beta LCM-name-miss flow; the RD_RDY wait above it IS bounded)
+#   * dsi_drv.c:4120  same function, do...while(packet_type) RX retry loop
+#   * dsi_drv.c:3899  same class in DSI_dcs_read_lcm_reg()
+#   * dsi_drv.c:323  read-ACK do-while (inside #if 0 - dead code, skip)
+#   * the non-interrupt build of _WaitForEngineNotBusy (#else arm) is already
+#     bounded (mdelay(10) x timeOut=200 then break) - no change needed.
+#
+# KNOWN INHERITED LIMITATION: the 100 ms budget uses get_current_time_us()
+# (do_gettimeofday, tv_sec&0xFFF, 32-bit result) exactly like the siblings; a
+# poll whose window straddles the ~4096 s wrap can miss its own expiry (the
+# sibling waits already carry this caveat). Kept byte-for-byte in the sibling
+# idiom per SS4's wording; a 64-bit sched_clock() budget is the cleaner
+# follow-up if Bob wants it.
+#
+# BUILD_UBOOT note: there get_current_time_us() is "return 0" (dsi_drv.c:179)
+# so the bound degrades to the old unbounded spin (no regression; those
+# variants differ only in the glue code that is not part of this fix).
+#
+# Parity gates when landed: none new expected - the change touches no string
+# or symbol surface outside the DSI poll path; re-runs of the per-tag MUST /
+# MUST-NOT string sets (build/50/60/61 SS4.2.8) must stay green.
+
+--- a/drivers/misc/mediatek/video/mt6582/dsi_drv.c
++++ b/drivers/misc/mediatek/video/mt6582/dsi_drv.c
+@@ -583,6 +583,11 @@
+ 				DSI_DumpRegisters();
+ 				DSI_Reset();
+ 				//dsiTeEnable = false;
++				/* D19: leave the loop on timeout. The old arm re-armed the same
++				 * wait_event_interruptible_timeout(2 s) endlessly whenever BUSY||CMD_DONE
++				 * never cleared -- the silent infinite hang at the LK logo (bob-m3 §4).
++				 * Dump+Reset above is the recovery the engine gets: one bounded try. */
++				break;
+             }
+         }
+     }
+@@ -1598,12 +1603,21 @@
+ 	int read_timeout_cnt=10000;
+ 	int read_timeout_ret = 0;
+     unsigned long long start_time,end_time;
++	long int poll_start;    /* D19: start of each bounded poll below */
+ 
+ 	if(glitch_detect_fail_cnt>2){
+ 		return 0;
+ 	}
+ 
+-	while(DSI_REG->DSI_INTSTA.BUSY);
++	poll_start = get_current_time_us();
++	while(DSI_REG->DSI_INTSTA.BUSY)
++	{
++		if(get_current_time_us() - poll_start > 100*1000)
++		{
++			DISP_LOG_PRINT(ANDROID_LOG_WARN, "DSI", " Wait for DSI engine BUSY timeout (D19: 100ms budget)!!!\n");
++			break;
++		}
++	}
+ 	OUTREG32(&DSI_REG->DSI_INTSTA, 0x0);
+ 
+ 	DSI_BackUpCmdQ();
+@@ -1616,7 +1630,15 @@
+ 
+ 	OUTREGBIT(DSI_START_REG,DSI_REG->DSI_START,DSI_START,0);
+ 	OUTREGBIT(DSI_START_REG,DSI_REG->DSI_START,DSI_START,1);
+-	while(DSI_REG->DSI_INTSTA.CMD_DONE == 0);
++	poll_start = get_current_time_us();
++	while(DSI_REG->DSI_INTSTA.CMD_DONE == 0)
++	{
++		if(get_current_time_us() - poll_start > 100*1000)
++		{
++			DISP_LOG_PRINT(ANDROID_LOG_WARN, "DSI", " Wait for CMD_DONE timeout (D19: 100ms budget)!!!\n");
++			break;
++		}
++	}
+ 	OUTREGBIT(DSI_INT_STATUS_REG,DSI_REG->DSI_INTSTA,CMD_DONE,0);
+ 
+ 	MMProfileLogEx(MTKFB_MMP_Events.Debug, MMProfileFlagPulse, 0, 0);
+@@ -1626,7 +1648,15 @@
+ 
+ 	OUTREGBIT(DSI_START_REG,DSI_REG->DSI_START,DSI_START,0);
+ 	OUTREGBIT(DSI_START_REG,DSI_REG->DSI_START,DSI_START,1);
+-	while(DSI_REG->DSI_INTSTA.CMD_DONE == 0);
++	poll_start = get_current_time_us();
++	while(DSI_REG->DSI_INTSTA.CMD_DONE == 0)
++	{
++		if(get_current_time_us() - poll_start > 100*1000)
++		{
++			DISP_LOG_PRINT(ANDROID_LOG_WARN, "DSI", " Wait for CMD_DONE timeout (D19: 100ms budget)!!!\n");
++			break;
++		}
++	}
+ 	OUTREGBIT(DSI_INT_STATUS_REG,DSI_REG->DSI_INTSTA,CMD_DONE,0);
+  #endif
+ 	for(i=0;i<try_times;i++)
+@@ -1636,7 +1666,15 @@
+ 		DSI_clk_HS_mode(0);
+ 
+     	MMProfileLogEx(MTKFB_MMP_Events.Debug, MMProfileFlagPulse, 0, 9);
+-		while((INREG32(&DSI_REG->DSI_STATE_DBG0)&0x1) == 0);	 // polling bit0
++		poll_start = get_current_time_us();
++		while((INREG32(&DSI_REG->DSI_STATE_DBG0)&0x1) == 0)	 // polling bit0
++		{
++			if(get_current_time_us() - poll_start > 100*1000)
++			{
++				DISP_LOG_PRINT(ANDROID_LOG_WARN, "DSI", " Wait for LCM engine ready timeout (D19: 100ms budget)!!!\n");
++				break;
++			}
++		}
+ 
+ 		OUTREGBIT(DSI_COM_CTRL_REG,DSI_REG->DSI_COM_CTRL,DSI_RESET,0);
+ 		OUTREGBIT(DSI_COM_CTRL_REG,DSI_REG->DSI_COM_CTRL,DSI_RESET,1);//reset
