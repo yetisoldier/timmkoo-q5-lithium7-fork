@@ -1,0 +1,67 @@
+--- a/org/cyanogenmod/cmparts/input/ButtonSettings$Action.smali
++++ b/org/cyanogenmod/cmparts/input/ButtonSettings$Action.smali
+@@ -26,6 +26,8 @@
+ # static fields
+ .field private static final synthetic $VALUES:[Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
+ 
++.field public static final enum BACK:Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
++
+ .field public static final enum APP_SWITCH:Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
+ 
+ .field public static final enum IN_APP_SEARCH:Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
+@@ -201,8 +203,14 @@
+ 
+     sput-object v0, Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;->SCREENSHOT:Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
+ 
++    new-instance v0, Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
++    const-string/jumbo v1, "BACK"
++    const/16 v2, 0xd
++    invoke-direct {v0, v1, v2}, Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;-><init>(Ljava/lang/String;I)V
++    sput-object v0, Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;->BACK:Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
++
+     .line 92
+-    const/16 v0, 0xd
++    const/16 v0, 0xe
+ 
+     new-array v0, v0, [Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
+ 
+@@ -272,6 +280,10 @@
+ 
+     const/16 v2, 0xc
+ 
++    aput-object v1, v0, v2
++
++    sget-object v1, Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;->BACK:Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
++    const/16 v2, 0xd
+     aput-object v1, v0, v2
+ 
+     sput-object v0, Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;->$VALUES:[Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
+@@ -309,7 +321,7 @@
+ 
+     array-length v0, v0
+ 
+-    if-le p0, v0, :cond_12
++    if-lt p0, v0, :cond_12
+ 
+     .line 109
+     :cond_f
+@@ -336,6 +348,19 @@
+ 
+     .prologue
+     .line 115
++    const-string v0, "key_home_long_press_action"
++    invoke-virtual {v0, p1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
++    move-result v0
++    if-eqz v0, :q5_double_default
++    sget-object p2, Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;->APP_SWITCH:Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
++    :q5_double_default
++    const-string v0, "key_home_double_tap_action"
++    invoke-virtual {v0, p1}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
++    move-result v0
++    if-eqz v0, :q5_default_done
++    sget-object p2, Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;->BACK:Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;
++    :q5_default_done
++
+     invoke-virtual {p2}, Lorg/cyanogenmod/cmparts/input/ButtonSettings$Action;->ordinal()I
+ 
+     move-result v0

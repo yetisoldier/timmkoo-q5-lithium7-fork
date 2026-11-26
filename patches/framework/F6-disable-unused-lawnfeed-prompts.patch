@@ -1,0 +1,39 @@
+--- a/ch/deletescape/lawnchair/Utilities.smali
++++ b/ch/deletescape/lawnchair/Utilities.smali
+@@ -3538,16 +3538,15 @@
+ .method public static showOutdatedLawnfeedPopup(Landroid/content/Context;)V
+     .registers 3
+ 
+-    sget-object v0, Lch/deletescape/lawnchair/overlay/ILauncherClient;->Companion:Lch/deletescape/lawnchair/overlay/ILauncherClient$Companion;
+-
+-    invoke-virtual {v0, p0}, Lch/deletescape/lawnchair/overlay/ILauncherClient$Companion;->getEnabledState(Landroid/content/Context;)I
+-
++    invoke-static {p0}, Lch/deletescape/lawnchair/Utilities;->getPrefs(Landroid/content/Context;)Lch/deletescape/lawnchair/preferences/IPreferenceProvider;
++    move-result-object v0
++    invoke-interface {v0}, Lch/deletescape/lawnchair/preferences/IPreferenceProvider;->getShowGoogleNowTab()Z
+     move-result v0
+-
+-    const/4 v1, 0x3
+-
+-    if-eq v0, v1, :cond_a
+-
++    if-eqz v0, :q5_feed_off
++    invoke-static {p0}, Lch/deletescape/lawnchair/Utilities;->checkOutdatedLawnfeed(Landroid/content/Context;)Z
++    move-result v0
++    if-nez v0, :cond_a
++    :q5_feed_off
+     return-void
+ 
+     :cond_a
+--- a/ch/deletescape/lawnchair/preferences/PreferenceImpl.smali
++++ b/ch/deletescape/lawnchair/preferences/PreferenceImpl.smali
+@@ -2107,7 +2107,8 @@
+ 
+     const-string v0, "disableLawnfeedPopup"
+ 
+-    invoke-direct {p1, p0, v0, v3}, Lch/deletescape/lawnchair/preferences/PreferenceImpl$MutableBooleanPref;-><init>(Lch/deletescape/lawnchair/preferences/PreferenceImpl;Ljava/lang/String;Z)V
++    const/4 v1, 0x1
++    invoke-direct {p1, p0, v0, v1}, Lch/deletescape/lawnchair/preferences/PreferenceImpl$MutableBooleanPref;-><init>(Lch/deletescape/lawnchair/preferences/PreferenceImpl;Ljava/lang/String;Z)V
+ 
+     iput-object p1, p0, Lch/deletescape/lawnchair/preferences/PreferenceImpl;->disableLawnfeedPopup$delegate:Lch/deletescape/lawnchair/preferences/PreferenceImpl$MutableBooleanPref;
+ 

@@ -1,0 +1,138 @@
+--- a/arch/arm/mach-mt6582/q5/sound/aw87559_pa.c
++++ b/arch/arm/mach-mt6582/q5/sound/aw87559_pa.c
+@@ -37,6 +37,7 @@
+ #include <linux/mutex.h>
+ #include <linux/slab.h>
+ #include <linux/err.h>
++#include <mach/mt_gpio.h>
+ 
+ /* aud-driver board glue header (declares the EAMP_* subcommands and the
+  * Audio_eamp_command contract) — resolved via Makefile.custom
+@@ -61,8 +62,8 @@
+ 	{ 0x62, 0xb5 }, { 0x78, 0x39 }, { 0x79, 0xe5 }, { 0x77, 0xc1 },
+ 	{ 0x77, 0xc1 }, { 0x78, 0x7a }, { 0x79, 0x6c }, { 0x77, 0x81 },
+ 	{ 0x66, 0x69 }, { 0x58, 0xbc },
+-	{ 0x02, 0x16 }, { 0x03, 0x0a }, { 0x04, 0x80 }, { 0x05, 0x08 },
+-	{ 0x06, 0x0c }, { 0x07, 0x85 }, { 0x08, 0x8e }, { 0x09, 0x04 },
++	{ 0x02, 0x1a }, { 0x03, 0x0a }, { 0x04, 0x80 }, { 0x05, 0x08 },
++	{ 0x06, 0x0c }, { 0x07, 0x0f }, { 0x08, 0x8e }, { 0x09, 0x08 },
+ 	{ 0x0a, 0x08 }, { 0x0b, 0x4a }, { 0x0c, 0x03 }, { 0x0d, 0x77 },
+ 	{ 0x0e, 0x7a }, { 0x0f, 0xa3 }, { 0x10, 0x58 },
+ 	{ 0x60, 0x26 }, { 0x61, 0x15 }, { 0x63, 0x5a }, { 0x64, 0xd5 },
+@@ -188,7 +189,7 @@
+ 		/* args = kernel pointer to the aud driver's AMP_Control (yusu_android_speaker.h):
+ 		 * {command, param1 = register, param2 = value} */
+ 		unsigned long *p = (unsigned long *)args;
+-		ret = aw87559_write_reg((int)p[0], (int)p[1]);
++		ret = aw87559_write_reg((int)p[1], (int)p[2]);
+ 		break;
+ 	}
+ 	case EAMP_SETAMP_GAIN:
+@@ -207,14 +208,8 @@
+ 		 * this analog amp has none — report zero, as the a106 stub did. */
+ 		break;
+ 	case EAMP_SETMODE:
+-		/* mode vocabulary is HAL-private (not string-recoverable); map hal-mode 0 to
+-		 * mute and anything else to the vendor on-image (full state restore). */
+-		if (args == 0)
+-			aw87559_disable_amp();
+-		else {
+-			if (aw87559_read_id() != 0 || aw87559_enable_amp() != 0)
+-				ret = -EIO;
+-		}
++		/* Android mode 0 means NORMAL, not mute. Mint's mode hook is a
++		 * no-op; power follows explicit speaker open/close commands. */
+ 		break;
+ 	default:
+ 		pr_warn("%s: unknown eamp command %u\n", AW87559_DRVNAME, type);
+@@ -244,8 +239,16 @@
+ 	aw87559_client = client;
+ 	i2c_set_clientdata(client, NULL);
+ 
++	/* Mint aw87559_i2c_probe @c055806c..c0558090: GPIO8 mode0,
++	 * output high, settle 50ms BEFORE reading ID. Live D35 rebind with
++	 * exactly this enable yielded chip ID 0x5a on bus2:0x58. */
++	mt_set_gpio_mode(0x80000008, GPIO_MODE_00);
++	mt_set_gpio_dir(0x80000008, GPIO_DIR_OUT);
++	mt_set_gpio_out(0x80000008, GPIO_OUT_ONE);
++	msleep(50);
+ 	ret = aw87559_read_id();
+ 	if (ret != 0) {
++		mt_set_gpio_out(0x80000008, GPIO_OUT_ZERO);
+ 		/* probe continues without a verified id only if the bus answered at all;
+ 		 * a dead bus leaves the amp unusable and is the G4 evidence point */
+ 		pr_err("%s: probe without verified chip id — amp stays muted (fix at G4 with board evidence)\n",
+@@ -253,6 +256,23 @@
+ 		aw87559_client = NULL;
+ 		return ret;
+ 	}
++	/* Mint initializes the complete image at probe, finishing muted.
++	 * The final on-sequence entry is SYSCTRL=0x78; omit it until open. */
++	{
++		size_t i;
++		if (aw87559_chipid == AW87559_CHIPID) {
++			for (i = 0; i + 1 < aw87559_on_seq_len; i++) {
++				ret = aw87559_write_reg(aw87559_on_seq[i].reg,
++						       aw87559_on_seq[i].val);
++				if (ret < 0) {
++					aw87559_client = NULL;
++					mt_set_gpio_out(0x80000008, GPIO_OUT_ZERO);
++					return ret;
++				}
++			}
++		}
++	}
++	pr_info("D36: Mint amplifier initialization complete, muted\n");
+ 	pr_info("%s: probed AW87559-family amp at bus %d addr 0x%02x (chip id 0x%02x)\n",
+ 		AW87559_DRVNAME, client->adapter->nr, client->addr, aw87559_chipid);
+ 	return 0;
+--- a/arch/arm/mach-mt6582/q5/sound/yusu_android_speaker.c
++++ b/arch/arm/mach-mt6582/q5/sound/yusu_android_speaker.c
+@@ -103,34 +103,25 @@
+ 
+ void Sound_Speaker_Turnon(int channel)
+ {
+-    PRINTK("Sound_Speaker_Turnon channel = %d\n",channel);
+-    if(gsk_on)
++    int ret;
++    if (gsk_on)
+         return;
+-#if defined(ENABLE_2_IN_1_SPK)
+-#if defined(AMP_CLASS_D)
+-
+-#endif
+-#endif
+-#if defined(AMP_CLASS_AB)
+-
+-#elif defined(AMP_CLASS_D)
+-
+-#endif
+-    //msleep(SPK_WARM_UP_TIME);
++    /* SET_SPEAKER_ON calls THIS legacy hook, not the EAMP ioctl hook.
++     * Mint @c04a764c connects this path to aw87559_on + 80ms settle. */
++    ret = Audio_eamp_command(EAMP_SPEAKER_OPEN, channel, 1);
++    if (ret) {
++        pr_err("D36: speaker open failed (%d)\n", ret);
++        return;
++    }
+     gsk_on = true;
+ }
+ 
+ void Sound_Speaker_Turnoff(int channel)
+ {
+-    PRINTK("Sound_Speaker_Turnoff channel = %d\n",channel);
+-	if(!gsk_on)
+-		return;
+-#if defined(AMP_CLASS_AB)
+-
+-#elif defined(AMP_CLASS_D)
+-
+-#endif
+-	gsk_on = false;
++    if (!gsk_on)
++        return;
++    Audio_eamp_command(EAMP_SPEAKER_CLOSE, channel, 1);
++    gsk_on = false;
+ }
+ 
+ void Sound_Speaker_SetVolLevel(int level)

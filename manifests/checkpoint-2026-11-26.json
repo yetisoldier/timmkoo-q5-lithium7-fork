@@ -1,0 +1,96 @@
+{
+  "date": "2026-11-26",
+  "status": "development; camera unresolved; no clean-install validation",
+  "kernel": "D42 (D39 user-confirmed baseline plus default-off diagnostics)",
+  "archive": {
+    "name": "Q5-Mint-Lithium7-D42-development-20261126.zip",
+    "sha256": "acf8cc6b877107b0753c4c73a6a5f8691d2268d282e0d4baf7b72bb908e24635",
+    "bytes": 324092076
+  },
+  "files": {
+    "boot.img": {
+      "bytes": 16777216,
+      "sha256": "5b9b297bce3cef9f21830a178f2a19f30f50a49a17822016a526aa6d0ccd0104"
+    },
+    "logo.bin": {
+      "bytes": 3145728,
+      "sha256": "8dfee5d07788fdcd019d4c9963b05f6f54de0e251d2909a01b612a771eb4ac02"
+    },
+    "MT6582_Android_scatter.txt": {
+      "bytes": 7254,
+      "sha256": "1824be75040f492077d50942d964e44d17a3fea2d1e5d6f1a811cb1ba18d848e"
+    },
+    "README.txt": {
+      "bytes": 1386,
+      "sha256": "e4711fa9ea2989a7c43ed44e122e079b3652bc599fe5d53c730149ae749f7455"
+    },
+    "system.img": {
+      "bytes": 761761792,
+      "sha256": "dd0d140150ba7d3a1b7ed3b9fd7c5a29538ab17171fb8d0e09a59fca4e5c7b46"
+    }
+  },
+  "framework": {
+    "services.jar": {
+      "input_sha256": "9343de13b41612570f3ac1b4ae8dd8ad35d14d93218edc5e5d7dbf744ea29e9e",
+      "output_sha256": "e507397fbb39413978a9bb022b8abfb79f6385a8582fec0983023942a7e584fd",
+      "patches": [
+        "F1-home-policy.patch"
+      ]
+    },
+    "CMParts.apk": {
+      "input_sha256": "2cebb14ea9e258f88db500fc5a75b243a443260c8b8a2508944f32f8850bc6ea",
+      "output_sha256": "e2d1be01048c190f62079f36a1e5c59416fbce654be058c83a42ba255b754aef",
+      "patches": [
+        "F2-home-action-enum.patch",
+        "F3-home-settings-ui.patch"
+      ]
+    },
+    "org.cyanogenmod.platform.jar": {
+      "input_sha256": "12cb612844aacc7c605bed83205c301870c88e750d78b3f63f3205788692a496",
+      "output_sha256": "2cfa57daaf1262a393abdb6ac0e1cf262b56b132ccb073d1aba7bb48730f10f4",
+      "patches": [
+        "F4-home-settings-validator.patch"
+      ]
+    },
+    "CMSettingsProvider.apk": {
+      "input_sha256": "e30c540e746e0d1900f1ff4c3c10a516578f2cba47ee23033cc2ed3bb2ae8079",
+      "output_sha256": "135afcdee8d6f64636255d1984f810d809b0f9bed98f5498bdd3c1327e5e251a",
+      "patches": [
+        "F5-home-provider-validator.patch"
+      ]
+    },
+    "Lawnchair.apk": {
+      "input_sha256": "69c0b465dbad6b397b059d87be3a4ad579085d5a257f0f829a2ff087720d52f7",
+      "output_sha256": "3d07da7bde5832b414f642b285b699848cc75ab615df3d0dbbf857b6cbce8130",
+      "patches": [
+        "F6-disable-unused-lawnfeed-prompts.patch"
+      ]
+    }
+  },
+  "camera_probe": {
+    "logical_slots": [
+      1,
+      2
+    ],
+    "i2c_buses": [
+      0,
+      1,
+      2
+    ],
+    "candidate_reads": 260,
+    "acknowledged": 0,
+    "diagnostic_budget_after_test": 0
+  },
+  "user_confirmed": "D39 touch, quick Home, speaker and headphone playback",
+  "automated_checks": [
+    "D42 boot partition readback hash match",
+    "D42 Home events: double Back, hold Recents, separate single Home",
+    "navbar property 0; no BROWSABLE HTTPS activities",
+    "launcher restart: no Lawnfeed update dialog",
+    "D42 ping 3/3 replies",
+    "amplifier ID 0x5a, mute 0x30, tuning 0x0f",
+    "fresh D42 patch application and ASan/UBSan bezel protocol test",
+    "original system snapshot retained; only inode-bitmap padding fixed on package copy; second e2fsck clean",
+    "ZIP CRC verification"
+  ]
+}

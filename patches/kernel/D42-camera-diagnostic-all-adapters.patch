@@ -1,0 +1,11 @@
+--- a/drivers/misc/mediatek/imgsensor/src/mt6582/kd_sensorlist.c
++++ b/drivers/misc/mediatek/imgsensor/src/mt6582/kd_sensorlist.c
+@@ -1535,7 +1535,7 @@
+     q5_camera_probe_budget = min(q5_camera_probe_budget, 10U) - 1;
+     pr_info("Q5CAM begin slot=%u power-template=%s remaining=%u\n",
+             g_invokeSocketIdx[0], g_invokeSensorNameStr[0], q5_camera_probe_budget);
+-    for (bus = 0; bus <= 1; bus++) {
++    for (bus = 0; bus <= 2; bus++) {
+         adapter = i2c_get_adapter(bus);
+         if (!adapter)
+             continue;
