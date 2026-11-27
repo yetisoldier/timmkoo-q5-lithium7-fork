@@ -1,0 +1,163 @@
+{
+  "version": "1.0.1",
+  "tag": "v1.0.1",
+  "name": "Lithium 7 for Q5 Gen 7 (Q5 Mint)",
+  "date": "2026-11-26",
+  "kernel": "D43/R4",
+  "assets": {
+    "Q5-Gen7-Lithium7-v1.0.1.zip": {
+      "bytes": 325834133,
+      "sha256": "9256e0ec671e79af85bb1b6ad98f846a50c7b1ceaf65c2ac9709379f5c5f7f71"
+    },
+    "Q5-Gen7-Lithium7-v1.0.1-kernel-source.tar.gz": {
+      "bytes": 133744086,
+      "sha256": "5ee34b2de8edbd6d14a51b7338be30487259fffb9ed817399c97c0bed9e55f66"
+    },
+    "AudioRecorder-3.5.23-source.tar.gz": {
+      "bytes": 181097,
+      "sha256": "e74dc61759a7c50780a6875f96661d0bc66f96b4c66fc5396768c2feeb3a08b1"
+    }
+  },
+  "firmware_files": {
+    "boot.img": {
+      "bytes": 16777216,
+      "sha256": "28c36be1bf2e9ee56169e0951bac246acc349f17996de37ab778e2c8142911dc"
+    },
+    "docs/BUILDING.md": {
+      "bytes": 5126,
+      "sha256": "25b0188f4b31261ed9b657ce705e6409955d6110c233a635a78efc445878f6c9"
+    },
+    "docs/CHRONICLE-COMPAT.md": {
+      "bytes": 1546,
+      "sha256": "f0c6de667d8294d283850902f77dda7cd355991795a80fc0cb98d13491bf0167"
+    },
+    "docs/images/fm-v1.0.0.png": {
+      "bytes": 26387,
+      "sha256": "6cb753e6b7534139c3c9028ba9b8c39989d3fa42fed95bfe98ac3c0868f50eef"
+    },
+    "docs/images/home-v1.0.0.png": {
+      "bytes": 539965,
+      "sha256": "7e85267be367d19c44e47602ba79036d4c48e119b18d0b27fd11c06d7acf7df1"
+    },
+    "docs/images/navigation-v1.0.0.png": {
+      "bytes": 48270,
+      "sha256": "b9cd6bc5dfbc6d2baa1739ada0c7616c60c08040fff809495c617577c8d94abd"
+    },
+    "docs/INSTALL.md": {
+      "bytes": 5373,
+      "sha256": "732cf6aac52b03af6b68d829de20c6bbba2f91ce8fbe11685ab42ad55e98f7a4"
+    },
+    "docs/licenses/Apache-2.0.txt": {
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "docs/licenses/AudioRecorder-LICENSE.txt": {
+      "bytes": 35107,
+      "sha256": "1ae84b4fe0c797eabace59dee86c8ac3f644dd6f6e9f074d6f083b29d86a59b3"
+    },
+    "docs/licenses/Linux-COPYING.txt": {
+      "bytes": 18693,
+      "sha256": "af8067302947c01fd9eee72befa54c7e3ef8a48fecde7fd71277f2290b2bf0f7"
+    },
+    "docs/OPTIONAL-CLIENTS.md": {
+      "bytes": 1722,
+      "sha256": "ddcf66909084c83fef1fd2bff12c97fe05ee96fc3293c534b7ce10674e50ebd2"
+    },
+    "docs/releases/v1.0.0.md": {
+      "bytes": 2657,
+      "sha256": "7c248bd4ca9c79344e47b3f2f583f13c8610b0dcf1607a29f755d677f932e4ce"
+    },
+    "docs/releases/v1.0.1.md": {
+      "bytes": 2774,
+      "sha256": "82992000427c4ef9d3afbe30e573629ddbeedcbb8f2d9c3a64f1f6d6a1010580"
+    },
+    "docs/validation/release-v1.0.1.json": {
+      "bytes": 2005,
+      "sha256": "b11f21164a51df3fa126439d7ce04d272cadf5f2ea3a74051bf94518ccca3b9c"
+    },
+    "docs/validation/wifi-d43-rapid.json": {
+      "bytes": 973,
+      "sha256": "3b94c89b1ff7aef8bfe7cce31c4db0fd71e5e7f8c97188d1ed3555a3586f7351"
+    },
+    "install-adb-recovery.py": {
+      "bytes": 6546,
+      "sha256": "c763b7e88531649e541d19f3ab98c352238ce9e65b286d9686c01bffde0482ed"
+    },
+    "logo.bin": {
+      "bytes": 3145728,
+      "sha256": "8dfee5d07788fdcd019d4c9963b05f6f54de0e251d2909a01b612a771eb4ac02"
+    },
+    "MT6582_Android_scatter.txt": {
+      "bytes": 6951,
+      "sha256": "099f2d7a7a5888faf95ff9918ae5ad511c2746a0de37a4ccebc1f26f5bc5a90a"
+    },
+    "README.md": {
+      "bytes": 7469,
+      "sha256": "0f35a39673b66abca0509a979133532b9a00ad5238e26f5d7055a2b462cba37e"
+    },
+    "README.txt": {
+      "bytes": 5532,
+      "sha256": "bd8df9a525924f02947c830b4dcf8abd8d2170079582c3969f1629a0580c4a6d"
+    },
+    "system-build.json": {
+      "bytes": 4370,
+      "sha256": "ec8e32b252b15b006c50eb1547ea95ed02aacf3bce7a75ede66a328ed607c9a7"
+    },
+    "system.img": {
+      "bytes": 761761792,
+      "sha256": "ffaad0d25827287a52aab79853ef373c20d427d539494cebc47f4c1d5b14bbe8"
+    },
+    "THIRD-PARTY-NOTICES.md": {
+      "bytes": 3137,
+      "sha256": "75c60116b1698fe4b7971e5b531fdabe58643b1cb1e1ae38dfc13a8d4db5da0c"
+    }
+  },
+  "validation": {
+    "status": "passed on connected Q5",
+    "method": "TWRP 3.6.0_9-0, data-preserving upgrade from official v1.0.0",
+    "written": [
+      "BOOTIMG",
+      "LOGO",
+      "ANDROID"
+    ],
+    "host_checks": {
+      "installer_modes": "7 tests passed",
+      "wifi_mac_native": "ASan/UBSan selection and invalid-input paths passed",
+      "wifi_recovery": "bounded retry and exclusion scenarios passed",
+      "plex_url_policy": "exact-host/route HTTPS and rejection cases passed",
+      "system_ext4": "e2fsck passed",
+      "source_archive": "D43 code and build config verified"
+    },
+    "owner_confirmations": {
+      "saga_signin": "restricted helper worked",
+      "chronicle": "patched app loaded; owner selected Kye and logged in"
+    },
+    "optional_apps": "Not bundled; Bookcamp dropped by owner; Prologue requires Android 13",
+    "remaining_checks": [
+      "Bluetooth paired audio/reconnect/buttons",
+      "post-cellular-change FM listening deferred by owner",
+      "battery life/low-SOC charging/unplugged deep sleep",
+      "inherited Settings Notification Drawer ClassCastException remains open"
+    ],
+    "readback": "All three complete image extents matched SHA-256",
+    "data_preserved": "Recovery verified identical package database and adopted-storage key fingerprints; no format/cache wipe",
+    "android": {
+      "boot_completed": true,
+      "release": "1.0.1",
+      "system_files_verified": 35,
+      "missing_removed_apps": true,
+      "wifi_automatic_internet": true,
+      "wifi_recovery_helper": "stopped",
+      "animations": "all three scales 0",
+      "cellular_helpers": "absent",
+      "plex_auth_handler": "resolved",
+      "general_https_handler": "none",
+      "signin_launcher_entry": "none",
+      "temporary_store": "removed",
+      "chronicle": "reopened and displayed signed-in library and cover images after upgrade",
+      "music_clients": "Apple Music and Plexamp present",
+      "navigation": "existing user visibility preference retained; defaults remain visible for clean installs"
+    }
+  },
+  "userdata": "Not bundled; existing optional apps and account data preserved by upgrade."
+}

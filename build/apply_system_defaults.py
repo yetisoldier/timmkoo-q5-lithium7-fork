@@ -31,7 +31,7 @@ def sha(path):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    for arg in ['input', 'out', 'branding', 'gestures', 'fm', 'recorder', 'media', 'webview']:
+    for arg in ['input', 'out', 'branding', 'gestures', 'fm', 'recorder', 'media', 'webview', 'signin']:
         p.add_argument('--' + arg, required=True, type=Path)
     p.add_argument('--release-version', help='Official Q5 Gen 7 semantic version')
     a = p.parse_args()
@@ -40,6 +40,12 @@ def main():
     assert not a.out.exists(), 'Output already exists'
     assert a.input.resolve() != a.out.resolve()
     assert sha(a.recorder) == RECORDER, 'Unexpected Audio Recorder APK'
+    signin = json.loads((a.signin.parent / 'plex-signin-manifest.json').read_text())
+    assert sha(a.signin) == signin['sha256']
+    assert signin['package'] == 'org.q5.plexsignin' and signin['launcher_entry'] is False
+    assert signin['https_plex_signin_only'] is True and signin['shared_system_uid'] is False
+    for name, expected in signin['source'].items():
+        assert sha(Path(__file__).resolve().parents[1] / name) == expected, name
     webview = json.loads((Path(__file__).resolve().parents[1] / 'manifests/webview.json').read_text())
     assert a.webview.stat().st_size == webview['size']
     assert sha(a.webview) == webview['sha256'], 'Unexpected WebView APK'
@@ -140,6 +146,8 @@ def main():
             if not exists(directory):
                 debug('mkdir ' + directory)
             label(directory, directory=True)
+        mkdir('/app/Q5PlexSignIn')
+        put(a.signin, '/app/Q5PlexSignIn/Q5PlexSignIn.apk')
         for apk, directory, filename in [
             (a.fm, '/priv-app/Q5FMRadio', 'Q5FMRadio.apk'),
             (a.recorder, '/app/Q5AudioRecorder', 'Q5AudioRecorder.apk'),

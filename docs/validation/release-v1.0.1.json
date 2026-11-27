@@ -1,0 +1,47 @@
+{
+  "status": "passed on connected Q5",
+  "method": "TWRP 3.6.0_9-0, data-preserving upgrade from official v1.0.0",
+  "written": [
+    "BOOTIMG",
+    "LOGO",
+    "ANDROID"
+  ],
+  "host_checks": {
+    "installer_modes": "7 tests passed",
+    "wifi_mac_native": "ASan/UBSan selection and invalid-input paths passed",
+    "wifi_recovery": "bounded retry and exclusion scenarios passed",
+    "plex_url_policy": "exact-host/route HTTPS and rejection cases passed",
+    "system_ext4": "e2fsck passed",
+    "source_archive": "D43 code and build config verified"
+  },
+  "owner_confirmations": {
+    "saga_signin": "restricted helper worked",
+    "chronicle": "patched app loaded; owner selected Kye and logged in"
+  },
+  "optional_apps": "Not bundled; Bookcamp dropped by owner; Prologue requires Android 13",
+  "remaining_checks": [
+    "Bluetooth paired audio/reconnect/buttons",
+    "post-cellular-change FM listening deferred by owner",
+    "battery life/low-SOC charging/unplugged deep sleep",
+    "inherited Settings Notification Drawer ClassCastException remains open"
+  ],
+  "readback": "All three complete image extents matched SHA-256",
+  "data_preserved": "Recovery verified identical package database and adopted-storage key fingerprints; no format/cache wipe",
+  "android": {
+    "boot_completed": true,
+    "release": "1.0.1",
+    "system_files_verified": 35,
+    "missing_removed_apps": true,
+    "wifi_automatic_internet": true,
+    "wifi_recovery_helper": "stopped",
+    "animations": "all three scales 0",
+    "cellular_helpers": "absent",
+    "plex_auth_handler": "resolved",
+    "general_https_handler": "none",
+    "signin_launcher_entry": "none",
+    "temporary_store": "removed",
+    "chronicle": "reopened and displayed signed-in library and cover images after upgrade",
+    "music_clients": "Apple Music and Plexamp present",
+    "navigation": "existing user visibility preference retained; defaults remain visible for clean installs"
+  }
+}

@@ -69,6 +69,7 @@ def main():
                      '/lib/libvcodec_utility.so', '/etc/media_codecs.xml',
                      '/priv-app/CMParts/CMParts.apk',
                      '/priv-app/Q5FMRadio/Q5FMRadio.apk',
+                     '/app/Q5PlexSignIn/Q5PlexSignIn.apk',
                      '/app/Q5AudioRecorder/Q5AudioRecorder.apk',
                      '/app/webview/webview.apk']:
         assert required in system_manifest['changes'], required

@@ -1,13 +1,13 @@
 # Build and provenance
 
-v1.0.0 targets only the Q5 Gen 7 / Q5 Mint MT6582 profile. The release combines
-the verified D42 kernel/R3 ramdisk with a newly generated versioned system image.
+v1.0.1 targets only the Q5 Gen 7 / Q5 Mint MT6582 profile. It combines
+the D43 kernel/R4 ramdisk with a newly generated versioned system image.
 It is an Android binary port; this repository is not a full AOSP source tree.
 
 To reproduce the immutable v1.0.0 release, use the `v1.0.0` tag. Current source
 also applies post-release Wi-Fi-only/ART defaults and D43 Wi-Fi reconnection
 support. See `PERFORMANCE-BRINGUP.md` and `WIFI-BRINGUP.md`; do not replace
-existing v1.0.0 release assets. Commands below target a development candidate.
+existing v1.0.0 release assets. Use the matching tagged source and release manifest for v1.0.1.
 
 Use Linux/WSL, Python 3.11+, debugfs/e2fsck, Java, a host C compiler with ASan/UBSan,
 and the pinned ARM EABI GCC 4.8
@@ -62,7 +62,8 @@ python3 build/apply_system_defaults.py --input /path/to/pinned-system-snapshot.i
   --out out/system-q5gen7-development.img --branding out/branding \
   --gestures out/framework-v4-navigation --fm out/fm-lineage-render/FMRadio.apk \
   --recorder /path/to/AudioRecorder-3.5.23.apk --media out/media-compat-v2 \
-  --webview /path/to/Lineage-WebView-119.apk
+  --webview /path/to/Lineage-WebView-119.apk \
+  --signin out/plex-signin-v1/Q5PlexSignIn.apk --release-version 1.0.1
 ```
 
 The defaults builder verifies donor/component hashes, creates release metadata,
@@ -77,3 +78,14 @@ defaults builder and packager, then publish matching source and checksums.
 The APK signature timestamp may change a rebuilt APK hash. Use the supplied
 release checksums for exact artifact verification. Historical development
 archives are not substitutes for the v1.0.0 release.
+
+## v1.0.1 inputs
+
+The official system build starts from the unmodified v1.0.0 raw system image
+(SHA-256 `0b5769d4ab571f6b028d93e30fe11faaba67504cb850df15fb18520d74ea95fe`).
+Build the restricted helper with `python build/build_plex_signin.py --help`;
+its pinned tools and source hashes are checked by the defaults builder.
+Use `--release-version 1.0.1` on both system builder and packager, D43/R4 boot
+and the matching source archive. Local signing keys are never published.
+The optional Chronicle compatibility builder patches only its pinned publisher
+APK; it is separate from the ROM and uses a distinct local signing identity.

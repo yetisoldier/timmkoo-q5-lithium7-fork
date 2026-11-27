@@ -4,9 +4,9 @@ Android 7.1.2 for the **TIMMKOO Q5 Gen 7**, also called **Q5 Mint**. This port
 brings the Mint-style Q5's touchscreen, Home button, speaker and FM radio to
 Lithium 7, with a blue DJ gnome boot screen and wallpaper.
 
-**[v1.0.0 release](https://github.com/yetisoldier/timmkoo-q5-lithium7-fork/releases/tag/v1.0.0)** ·
-[Download firmware](https://github.com/yetisoldier/timmkoo-q5-lithium7-fork/releases/download/v1.0.0/Q5-Gen7-Lithium7-v1.0.0.zip) ·
-[Installation](docs/INSTALL.md) · [Release notes](docs/releases/v1.0.0.md)
+**[v1.0.1 release](https://github.com/yetisoldier/timmkoo-q5-lithium7-fork/releases/tag/v1.0.1)** ·
+[Download firmware](https://github.com/yetisoldier/timmkoo-q5-lithium7-fork/releases/download/v1.0.1/Q5-Gen7-Lithium7-v1.0.1.zip) ·
+[Installation](docs/INSTALL.md) · [Release notes](docs/releases/v1.0.1.md)
 
 ## Is this for my Q5?
 
@@ -41,10 +41,14 @@ and Mint partition layout before flashing.
 - Hardware H.264 playback tested at 720p; the tested 1080p file uses software
   decoding. Other formats/profiles depend on their codecs.
 - USB file transfer: select **Transfer files** from the USB connection options.
-- Wi-Fi, internal/microSD storage and Android music/gallery tools.
+- Wi-Fi with a persistent fallback address and bounded startup reconnection recovery.
+- Wi-Fi-only configuration: cellular modem services and SIM/call lock-screen notices disabled.
+- Internal/microSD storage and Android music/gallery tools.
 - Blue gnome boot artwork/default wallpaper; the false Lawnfeed prompt removed.
 - Jelly, HTMLViewer, Open Camera and Xposed Installer removed from defaults.
   Embedded WebView remains for app connection screens.
+- Hidden Plex sign-in window for compatible clients, tested with Saga. It has
+  no launcher icon or address bar and accepts only supported Plex auth URLs.
 
 ## Screenshots
 
@@ -58,9 +62,12 @@ Taken from the clean v1.0.0 installation on the tested Q5.
 
 ## Installation
 
-Download **Q5-Gen7-Lithium7-v1.0.0.zip** from Releases and check its SHA-256
+Download **Q5-Gen7-Lithium7-v1.0.1.zip** from Releases and check its SHA-256
 against the accompanying checksum file. GitHub's automatic **Source code**
 downloads are not flashable firmware.
+
+Existing official v1.0.0 installations can use the documented **data-preserving
+upgrade**. Back up first. Moving from Mint or another ROM requires a clean install.
 
 **A clean installation erases internal apps, logins, recordings and files.**
 Formatting internal data also destroys adopted microSD decryption keys. Back
@@ -89,6 +96,13 @@ server URL → Submit → sign in**. Server authentication, streaming, offline
 books and subscription/DRM playback depend on your app version and service.
 Google Play services are not bundled.
 
+On the tested Apple Music 4.7.2 installation, turning Motion off and Reduce
+Player Motion on avoided the animated-artwork codec failure. Keep Android
+animation scales off for this slow device; use a Flat background in Plexamp.
+These optional app preferences belong to your account/install and are not
+firmware-bundled settings. Saga supports library selection but has no Plex
+Home profile picker in the tested 1.2.0 release.
+
 Browser removal does not block networking inside other apps or prevent
 sideloading. This firmware is not a parental-control system.
 
@@ -99,6 +113,8 @@ recording/playback and FM headphone reception. USB transfer, network access,
 storage and the stated video cases were also tested. This first release does
 not claim every Android feature or third-party app has been validated.
 
+- The inherited Settings > Notification Drawer customization screen has a
+  recorded crash; its repair remains open.
 - Bluetooth discovery works; paired audio, reconnect and headset buttons need
   a physical headset test.
 - FM speaker/Bluetooth output and a full station scan remain unverified.

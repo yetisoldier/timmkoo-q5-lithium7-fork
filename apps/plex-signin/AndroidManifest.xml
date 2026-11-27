@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.q5.plexsignin" android:versionCode="1" android:versionName="1.0">
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="25" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application android:label="Q5 Plex Sign-in" android:allowBackup="false" android:debuggable="false" android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity android:name=".PlexSignInActivity" android:exported="true" android:noHistory="true" android:excludeFromRecents="true" android:screenOrientation="portrait" android:configChanges="orientation|keyboardHidden|screenSize" android:hardwareAccelerated="false">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="app.plex.tv" android:pathPrefix="/auth" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="plex.tv" android:pathPrefix="/link" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

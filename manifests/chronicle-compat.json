@@ -1,0 +1,12 @@
+{
+  "package": "io.github.mattpvaughn.chronicle",
+  "upstream_version": "0.53.0",
+  "upstream_source": "https://github.com/mattttvaughn/chronicle/tree/0.53.0",
+  "input_url": "https://github.com/mattttvaughn/chronicle/releases/download/0.53.0/app-freeAsInBeer-release.apk",
+  "input_sha256": "37c36aa2c6eab9eaefdc291e2696b70ed80cdc04411a85f0b87e050f6be71d6e",
+  "license": "GPL-3.0",
+  "minSdk": 21,
+  "variant": "Unofficial Q5 app-local API-25 compatibility guard",
+  "bundled_in_firmware": false,
+  "note": "Uses a Q5 signing identity. Do not replace a publisher install without a private data backup/restore."
+}

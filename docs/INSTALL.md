@@ -1,4 +1,4 @@
-# Install v1.0.0 on Q5 Gen 7 (Q5 Mint)
+# Install v1.0.1 on Q5 Gen 7 (Q5 Mint)
 
 Only for the **MT6582, 480×800 Mint-style Q5 with one front Home circle**.
 Read the README's compatibility and known-limits sections first.
@@ -9,12 +9,12 @@ Read the README's compatibility and known-limits sections first.
    and awake throughout the write.
 2. Back up internal files and accounts. A clean install erases them, including
    keys for adopted/encrypted microSD storage. Remove portable microSD cards.
-3. Download `Q5-Gen7-Lithium7-v1.0.0.zip` and its `.zip.sha256` from the v1.0.0
+3. Download `Q5-Gen7-Lithium7-v1.0.1.zip` and its `.zip.sha256` from the v1.0.1
    release. GitHub's Source code ZIP is not firmware.
 4. Compare the entire SHA-256 result with the checksum file, then extract:
 
    ```powershell
-   Get-FileHash .\Q5-Gen7-Lithium7-v1.0.0.zip -Algorithm SHA256
+   Get-FileHash .\Q5-Gen7-Lithium7-v1.0.1.zip -Algorithm SHA256
    ```
 
 The bundle contains raw images, not an OTA. **Do not use TWRP Install ZIP.**
@@ -36,15 +36,27 @@ and a root ADB shell in that recovery. No Android root app is required.
 
    Wait for `recovery` beside the serial. If the host loses the connection,
    try `adb kill-server`, then `adb start-server`.
-2. Open a terminal in the extracted release folder, substitute your serial:
+2. Open a terminal in the extracted release folder, substitute your serial.
+   **For a clean installation** (required when coming from Mint/another ROM):
 
    ```text
    python install-adb-recovery.py --serial YOUR_SERIAL --factory-reset --reboot
    ```
 
+   **To upgrade an existing official v1.0.0 or v1.0.1 installation while
+   preserving apps, accounts, files and adopted-storage keys**, use this instead:
+
+   ```text
+   python install-adb-recovery.py --serial YOUR_SERIAL --upgrade --reboot
+   ```
+
+   The installer checks the installed release and private data/key fingerprints.
+   It does not format data or clear cache in upgrade mode. Backups are still
+   recommended; do not bypass a failed assertion.
+
 3. Keep USB connected until all three images report **Readback verified**.
-   The script validates hashes/layout, writes boot/system/logo, formats
-   internal data, clears cache and reboots. Do not bypass a failed assertion.
+   The script validates hashes/layout and writes boot/system/logo. Only
+   `--factory-reset` formats data and clears cache; `--upgrade` preserves them. Do not bypass a failed assertion.
 4. Allow several minutes for first boot and complete Android setup. Approve
    USB debugging again only if you want to use ADB.
 
@@ -87,7 +99,7 @@ layout; the release device was installed using Method A, not this GUI route.
 - Physical Home: tap Home, double-tap Back, hold Recent Apps.
 - Choose **Transfer files** in USB options to copy media.
 - Plug in headphones as the FM antenna and tune a local station.
-- Reinstall optional streaming clients and sign in afresh. They and Google
+- After a clean install, reinstall optional streaming clients and sign in afresh. They and Google
   services are not included in the firmware bundle.
 - A former adopted card may prompt for formatting. This erases its old files;
   choose portable storage to move it between the Q5 and a computer.
@@ -95,7 +107,7 @@ layout; the release device was installed using Method A, not this GUI route.
 ## Troubleshooting
 
 First boot takes longer. If startup fails, return to the existing recovery,
-check that all three images match this release, and confirm data was reset.
+check that all three images match this release, and confirm you used the appropriate clean-install or supported-upgrade mode.
 Collect recovery/ADB logs when available. A failure is not a reason to format
 the entire flash or write a different preloader.
 
