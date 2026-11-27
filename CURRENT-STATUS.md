@@ -3,11 +3,16 @@
 **v1.0.0 is the first official community release for Q5 Gen 7 (Q5 Mint).**
 See [README.md](README.md), [installation](docs/INSTALL.md), and
 [release notes](docs/releases/v1.0.0.md) for customer-facing information.
-The current build uses D42-R3, retaining the D39 user-confirmed hardware fixes.
+The published release uses D42-R3, retaining the D39 user-confirmed hardware fixes.
+Post-release Wi-Fi-only/runtime changes are documented in
+[PERFORMANCE-BRINGUP.md](PERFORMANCE-BRINGUP.md). They preserve userdata; the
+v1.0.0 release assets have not been replaced.
 Camera is omitted per product evidence; no fitted sensor is confirmed.
 The records below preserve the bring-up history and its validation limits.
 
-The current installed boot is **D42-R3** (D42 kernel, corrected FM, USB and codec startup ramdisk): D39 plus default-off camera
+The post-release installed boot is **D42-R4** (same D42 kernel, corrected FM,
+USB and codec startup ramdisk, with cellular modem helpers disabled). The
+following D42-R3 record describes the released baseline: D39 plus default-off camera
 diagnostics (D40–D42). D42 boots, passes the native Home policy regression,
 and retains mainkeys=0 and zero browser handlers. The Settings visibility switch
 uses secure navigation_bar_visible independently of this property. Keep D39 as the user-confirmed

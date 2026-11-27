@@ -4,6 +4,10 @@ v1.0.0 targets only the Q5 Gen 7 / Q5 Mint MT6582 profile. The release combines
 the verified D42 kernel/R3 ramdisk with a newly generated versioned system image.
 It is an Android binary port; this repository is not a full AOSP source tree.
 
+To reproduce the immutable v1.0.0 release, use the `v1.0.0` tag. Current source
+also applies the post-release Wi-Fi-only and ART defaults described in
+`PERFORMANCE-BRINGUP.md`; do not replace existing v1.0.0 release assets.
+
 Use Linux/WSL, Python 3.11+, debugfs/e2fsck, Java and the pinned ARM EABI GCC 4.8
 toolchain. Windows runs the Python app builder with aapt through WSL Ubuntu.
 Do not run the older M1a audio-HAL substitution pipeline on this working profile.
@@ -20,6 +24,7 @@ Q5_BUILD_WORK=/path/to/new/work bash build/81_kernel_camera_diagnostic_all_adapt
 python3 build/patch_fm_boot_node.py out/boot-d42.img out/boot-d42-r1.img
 python3 build/patch_usb_boot.py out/boot-d42-r1.img out/boot-d42-r2.img
 python3 build/patch_codec_boot.py out/boot-d42-r2.img out/boot-d42-r3.img
+python3 build/patch_wifi_only_boot.py out/boot-d42-r3.img out/boot-d42-r4.img
 ```
 
 The release's corresponding-source archive contains the already patched
@@ -31,6 +36,9 @@ toolchain. Kernel compilation does not reproduce the proprietary userspace.
 
 - `build/build_branding.py`: user artwork to boot/logo/default wallpaper.
 - `build/build_home_gestures.py`: pinned framework inputs and F1–F7 patches.
+- `build/build_wifi_only.py`: voice/SMS capability resources, applied after
+  branding by the system defaults builder. `ro.radio.noril=true` removes mobile
+  network support and its lock-screen carrier text; Wi-Fi remains available.
 - `build/build_lineage_fm.py`: pinned Lineage receiver, private app UID and
   corrected original Lithium JNI. Retains software rendering.
 - `build/build_media_compat.py`: pinned media donors and the codec-only native

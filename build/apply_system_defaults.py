@@ -15,6 +15,8 @@ import subprocess
 import tempfile
 import zipfile
 from prune_features import prune
+from q5_runtime_defaults import normalize_properties, disable_service
+from build_wifi_only import build as build_wifi_only
 
 HAL = 'a7cc2dbe2cc2b8fd9c06d86f6f9479670a16e66bacc8941660ac81d6a370463e'
 RECORDER = 'eba0e28fe6d502c919218912f077407eef952dc39d8df431df31a28683739cc5'
@@ -107,7 +109,15 @@ def main():
             (a.gestures / 'CMSettingsProvider.apk', '/priv-app/CMSettingsProvider/CMSettingsProvider.apk'),
             (a.gestures / 'Lawnchair.apk', '/priv-app/Lawnchair/Lawnchair.apk'),
         ]:
+            if remote == '/framework/framework-res.apk':
+                wifi_framework = tmp / 'framework-res-wifi.apk'
+                build_wifi_only(local, wifi_framework)
+                local = wifi_framework
             put(local, remote)
+        rild = tmp / 'rild.rc'
+        extract('/etc/init/rild.rc', rild)
+        rild.write_bytes(disable_service(rild.read_bytes(), 'ril-daemon'))
+        put(rild, '/etc/init/rild.rc')
         for name in ['libMtkOmxVdec.so', 'libstagefright.so', 'libmhalImageCodec.so',
                      'libmmprofile.so', 'libq5.so', 'libvcodec_utility.so']:
             put(a.media / name, '/lib/' + name)
@@ -154,7 +164,7 @@ def main():
                 put(local, remote)
         prop = tmp / 'build.prop'
         extract('/build.prop', prop)
-        data = prop.read_text()
+        data = normalize_properties(prop.read_text())
         matches = re.findall(r'(?m)^qemu\.hw\.mainkeys=.*$', data)
         assert len(matches) <= 1, 'Review duplicate mainkeys properties'
         data = (re.sub(r'(?m)^qemu\.hw\.mainkeys=.*$', 'qemu.hw.mainkeys=0', data)
@@ -180,7 +190,7 @@ def main():
                 'name': 'Lithium 7 for Q5 Gen 7 (Q5 Mint)',
                 'version': a.release_version, 'source_ref': 'v' + a.release_version,
                 'hardware': 'Mint-style MT6582, 480x800, single front Home circle',
-                'android': '7.1.2', 'kernel_profile': 'D42-R3',
+                'android': '7.1.2', 'kernel_profile': 'D42-R4',
             }, indent=2) + '\n', encoding='utf-8')
             put(release, '/etc/q5-release.json')
         prop.write_text(data)
