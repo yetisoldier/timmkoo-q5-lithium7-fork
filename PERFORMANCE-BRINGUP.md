@@ -53,8 +53,9 @@ The live lock screen was visually checked: the No SIM/emergency-only carrier
 message is absent. On the final D42-R4 boot, Wi-Fi reconnected automatically
 and two external pings passed with no cellular helper processes present.
 An earlier boot had AP authentication timeouts; the owner confirmed needing
-manual Wi-Fi reconnects before these changes. Keep intermittent auto-reconnect
-as an open issue rather than attributing it to this patch or claiming it fixed.
+manual Wi-Fi reconnects before these changes. The later D43 candidate adds
+persistent addressing and bounded startup recovery; see [WIFI-BRINGUP.md](WIFI-BRINGUP.md)
+for the actual reconnect tests and remaining protocol limitations.
 Bluetooth turned ON after the final R4 boot with the helpers absent and was
 restored to OFF. The local WAV preview showed playback and an active AudioTrack;
 the original audio HAL hash still matched. This was not an audible listening test.

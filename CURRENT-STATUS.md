@@ -7,10 +7,13 @@ The published release uses D42-R3, retaining the D39 user-confirmed hardware fix
 Post-release Wi-Fi-only/runtime changes are documented in
 [PERFORMANCE-BRINGUP.md](PERFORMANCE-BRINGUP.md). They preserve userdata; the
 v1.0.0 release assets have not been replaced.
+The installed Wi-Fi reconnection candidate uses D43/R4; see
+[WIFI-BRINGUP.md](WIFI-BRINGUP.md) for persistent addressing and bounded startup
+recovery, including observed timing and test limits.
 Camera is omitted per product evidence; no fitted sensor is confirmed.
 The records below preserve the bring-up history and its validation limits.
 
-The post-release installed boot is **D42-R4** (same D42 kernel, corrected FM,
+The post-release installed boot is **D43-R4** (D42 plus Wi-Fi address fallback, corrected FM,
 USB and codec startup ramdisk, with cellular modem helpers disabled). The
 following D42-R3 record describes the released baseline: D39 plus default-off camera
 diagnostics (D40–D42). D42 boots, passes the native Home policy regression,

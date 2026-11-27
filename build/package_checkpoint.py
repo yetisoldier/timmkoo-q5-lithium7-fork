@@ -63,7 +63,9 @@ def main():
         assert re.fullmatch(r'\d+\.\d+\.\d+', a.release_version)
         assert system_manifest['release_version'] == a.release_version
         assert '/etc/q5-release.json' in system_manifest['changes']
-    for required in ['/etc/q5-codec-limits.sh', '/lib/libq5.so',
+    for required in ['/etc/q5-wifi-address.sh', '/etc/q5-wifi-reconnect.sh',
+                     '/etc/init/q5-wifi-address.rc',
+                     '/etc/q5-codec-limits.sh', '/lib/libq5.so',
                      '/lib/libvcodec_utility.so', '/etc/media_codecs.xml',
                      '/priv-app/CMParts/CMParts.apk',
                      '/priv-app/Q5FMRadio/Q5FMRadio.apk',
