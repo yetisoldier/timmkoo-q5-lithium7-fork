@@ -15,9 +15,12 @@ import subprocess
 import tempfile
 import zipfile
 from prune_features import prune
+from q5_runtime_defaults import normalize_properties, disable_service
+from build_wifi_only import build as build_wifi_only
 
 HAL = 'a7cc2dbe2cc2b8fd9c06d86f6f9479670a16e66bacc8941660ac81d6a370463e'
 RECORDER = 'eba0e28fe6d502c919218912f077407eef952dc39d8df431df31a28683739cc5'
+WIFI_FW = '07dc74f8a1bb0c5c554803a0429309552b50caa0b9a956d7c4718016a8125b53'
 
 def sha(path):
     h = hashlib.sha256()
@@ -28,7 +31,7 @@ def sha(path):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    for arg in ['input', 'out', 'branding', 'gestures', 'fm', 'recorder', 'media', 'webview']:
+    for arg in ['input', 'out', 'branding', 'gestures', 'fm', 'recorder', 'media', 'webview', 'signin']:
         p.add_argument('--' + arg, required=True, type=Path)
     p.add_argument('--release-version', help='Official Q5 Gen 7 semantic version')
     a = p.parse_args()
@@ -37,6 +40,12 @@ def main():
     assert not a.out.exists(), 'Output already exists'
     assert a.input.resolve() != a.out.resolve()
     assert sha(a.recorder) == RECORDER, 'Unexpected Audio Recorder APK'
+    signin = json.loads((a.signin.parent / 'plex-signin-manifest.json').read_text())
+    assert sha(a.signin) == signin['sha256']
+    assert signin['package'] == 'org.q5.plexsignin' and signin['launcher_entry'] is False
+    assert signin['https_plex_signin_only'] is True and signin['shared_system_uid'] is False
+    for name, expected in signin['source'].items():
+        assert sha(Path(__file__).resolve().parents[1] / name) == expected, name
     webview = json.loads((Path(__file__).resolve().parents[1] / 'manifests/webview.json').read_text())
     assert a.webview.stat().st_size == webview['size']
     assert sha(a.webview) == webview['sha256'], 'Unexpected WebView APK'
@@ -85,6 +94,9 @@ def main():
         hal = tmp / 'hal.so'
         extract('/lib/hw/audio.primary.mt6582.so', hal)
         assert sha(hal) == HAL, 'Expected tested original Lithium audio HAL'
+        wifi_fw = tmp / 'wifi-firmware.bin'
+        extract('/etc/firmware/WIFI_RAM_CODE_SOC', wifi_fw)
+        assert sha(wifi_fw) == WIFI_FW, 'Expected tested Android 7 Wi-Fi firmware'
         m4u = tmp / 'unchanged-m4u.so'
         extract('/lib/libm4u.so', m4u)
         assert sha(m4u) == media_manifest['inputs']['libm4u.so'], 'Unexpected shared graphics M4U library'
@@ -107,7 +119,19 @@ def main():
             (a.gestures / 'CMSettingsProvider.apk', '/priv-app/CMSettingsProvider/CMSettingsProvider.apk'),
             (a.gestures / 'Lawnchair.apk', '/priv-app/Lawnchair/Lawnchair.apk'),
         ]:
+            if remote == '/framework/framework-res.apk':
+                wifi_framework = tmp / 'framework-res-wifi.apk'
+                build_wifi_only(local, wifi_framework)
+                local = wifi_framework
             put(local, remote)
+        rild = tmp / 'rild.rc'
+        extract('/etc/init/rild.rc', rild)
+        rild.write_bytes(disable_service(rild.read_bytes(), 'ril-daemon'))
+        put(rild, '/etc/init/rild.rc')
+        for name, remote in [('q5-wifi-address.sh', '/etc/q5-wifi-address.sh'),
+                             ('q5-wifi-reconnect.sh', '/etc/q5-wifi-reconnect.sh'),
+                             ('q5-wifi-address.rc', '/etc/init/q5-wifi-address.rc')]:
+            put(Path(__file__).resolve().parent / name, remote)
         for name in ['libMtkOmxVdec.so', 'libstagefright.so', 'libmhalImageCodec.so',
                      'libmmprofile.so', 'libq5.so', 'libvcodec_utility.so']:
             put(a.media / name, '/lib/' + name)
@@ -122,6 +146,8 @@ def main():
             if not exists(directory):
                 debug('mkdir ' + directory)
             label(directory, directory=True)
+        mkdir('/app/Q5PlexSignIn')
+        put(a.signin, '/app/Q5PlexSignIn/Q5PlexSignIn.apk')
         for apk, directory, filename in [
             (a.fm, '/priv-app/Q5FMRadio', 'Q5FMRadio.apk'),
             (a.recorder, '/app/Q5AudioRecorder', 'Q5AudioRecorder.apk'),
@@ -154,7 +180,7 @@ def main():
                 put(local, remote)
         prop = tmp / 'build.prop'
         extract('/build.prop', prop)
-        data = prop.read_text()
+        data = normalize_properties(prop.read_text())
         matches = re.findall(r'(?m)^qemu\.hw\.mainkeys=.*$', data)
         assert len(matches) <= 1, 'Review duplicate mainkeys properties'
         data = (re.sub(r'(?m)^qemu\.hw\.mainkeys=.*$', 'qemu.hw.mainkeys=0', data)
@@ -180,7 +206,7 @@ def main():
                 'name': 'Lithium 7 for Q5 Gen 7 (Q5 Mint)',
                 'version': a.release_version, 'source_ref': 'v' + a.release_version,
                 'hardware': 'Mint-style MT6582, 480x800, single front Home circle',
-                'android': '7.1.2', 'kernel_profile': 'D42-R3',
+                'android': '7.1.2', 'kernel_profile': 'D43-R4',
             }, indent=2) + '\n', encoding='utf-8')
             put(release, '/etc/q5-release.json')
         prop.write_text(data)
@@ -193,7 +219,7 @@ def main():
     assert repair.returncode in [0, 1], 'Output filesystem repair failed'
     subprocess.run(['e2fsck', '-f', '-n', str(a.out)], check=True)
     manifest = {'input_sha256': sha(a.input), 'output_sha256': sha(a.out),
-                'audio_hal_sha256': HAL, 'changes': changes,
+                'audio_hal_sha256': HAL, 'wifi_firmware_sha256': WIFI_FW, 'changes': changes,
                 'release_version': a.release_version,
                 'note': 'Q5 Gen 7 / Q5 Mint only. Camera omitted per product evidence; see release notes for validation limits.'}
     a.out.with_suffix('.json').write_text(json.dumps(manifest, indent=2) + '\n')

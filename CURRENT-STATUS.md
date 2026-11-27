@@ -1,13 +1,19 @@
 # Q5 Lithium 7 bring-up — 2026-11-26
 
-**v1.0.0 is the first official community release for Q5 Gen 7 (Q5 Mint).**
+**v1.0.1 packages the D43/R4 Wi-Fi and Wi-Fi-only/runtime refinements.**
 See [README.md](README.md), [installation](docs/INSTALL.md), and
-[release notes](docs/releases/v1.0.0.md) for customer-facing information.
-The current build uses D42-R3, retaining the D39 user-confirmed hardware fixes.
+[release notes](docs/releases/v1.0.1.md) for customer-facing information.
+The first official v1.0.0 assets remain immutable. This update preserves the
+D39 user-confirmed touch/Home/audio fixes and adds restricted Plex sign-in.
+See [PERFORMANCE-BRINGUP.md](PERFORMANCE-BRINGUP.md),
+[WIFI-BRINGUP.md](WIFI-BRINGUP.md) and [optional clients](docs/OPTIONAL-CLIENTS.md)
+for evidence, workarounds and remaining validation limits.
 Camera is omitted per product evidence; no fitted sensor is confirmed.
 The records below preserve the bring-up history and its validation limits.
 
-The current installed boot is **D42-R3** (D42 kernel, corrected FM, USB and codec startup ramdisk): D39 plus default-off camera
+The post-release installed boot is **D43-R4** (D42 plus Wi-Fi address fallback, corrected FM,
+USB and codec startup ramdisk, with cellular modem helpers disabled). The
+following D42-R3 record describes the released baseline: D39 plus default-off camera
 diagnostics (D40–D42). D42 boots, passes the native Home policy regression,
 and retains mainkeys=0 and zero browser handlers. The Settings visibility switch
 uses secure navigation_bar_visible independently of this property. Keep D39 as the user-confirmed
@@ -24,7 +30,7 @@ physical touch/Home/audio baseline; later physical confirmation is still useful.
 | Headphone/speaker switching | Headphones were tested; user reports unplugging pauses the player, and pressing Play resumes through the speaker. The app's pause must not be mistaken for routing failure. |
 | On-screen navigation | Visible by default. Settings > Buttons > Show navigation buttons works, including persistence of OFF across reboot. F7 exposes the native switch without an unsupported hardware-key-disabler capability. Home assignments remain available. |
 | Gnome branding | User-supplied artwork encoded at 480×800; boot layers 0/38 replaced and other 37 logo layers verified byte-identical. Static Android boot display and all seven framework default wallpaper drawables use the same image. Home-screen screenshot verified. |
-| Browsers | Jelly and HTMLViewer APKs/directories removed from `/system`, including after reboot. No BROWSABLE https VIEW activities remain. WebView is retained for apps. This is browser removal, not comprehensive parental filtering. |
+| Browsers | Jelly and HTMLViewer APKs/directories removed from `/system`, including after reboot. The v1.0.0 baseline had no BROWSABLE https VIEW activities. The v1.0.1 candidate adds a restricted Plex-auth-only handler, with no launcher or general browsing. WebView is retained for apps. This is browser removal, not comprehensive parental filtering. |
 | Network | D38 disables unsafe ARM jump labels while retaining read-only kernel text. Ping no longer crashes the kernel; repeated three-packet pings pass on D39. |
 | Storage | Internal emulated storage mounts. The external card is now adopted, UUID c9c65e1c-f5f0-48f2-a93d-395cbdc5f49e, and remained mounted across reboot. Preserve its key in userdata; do not format or forget it. |
 | Boot / ADB | D34–D39 booted through Android. USB ADB and root adbd work. Windows ADB server sometimes needs restarting after reboot/root. |

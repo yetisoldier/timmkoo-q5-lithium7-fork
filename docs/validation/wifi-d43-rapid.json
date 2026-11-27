@@ -1,0 +1,50 @@
+[
+  {
+    "cycle": 1,
+    "automatic_ipv4": true,
+    "seconds": 7.8,
+    "persistent_mac": true,
+    "external_ping": true,
+    "ready_seconds": 8.2
+  },
+  {
+    "cycle": 2,
+    "automatic_ipv4": true,
+    "seconds": 7.9,
+    "persistent_mac": true,
+    "external_ping": true,
+    "ready_seconds": 8.2
+  },
+  {
+    "cycle": 3,
+    "automatic_ipv4": true,
+    "seconds": 7.8,
+    "persistent_mac": true,
+    "external_ping": true,
+    "ready_seconds": 8.2
+  },
+  {
+    "cycle": 4,
+    "automatic_ipv4": true,
+    "seconds": 7.9,
+    "persistent_mac": true,
+    "external_ping": true,
+    "ready_seconds": 8.3
+  },
+  {
+    "cycle": 5,
+    "automatic_ipv4": true,
+    "seconds": 7.8,
+    "persistent_mac": true,
+    "external_ping": true,
+    "ready_seconds": 8.2
+  },
+  {
+    "cycle": 6,
+    "automatic_ipv4": true,
+    "seconds": 37.6,
+    "persistent_mac": true,
+    "external_ping": true,
+    "ready_seconds": 39.3
+  }
+]

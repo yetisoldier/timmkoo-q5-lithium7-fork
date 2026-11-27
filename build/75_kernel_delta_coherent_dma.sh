@@ -6,7 +6,7 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 checkout=$(realpath "${1:?kernel checkout required}")
 base_boot=$(realpath "${2:?backed-up Android-v0 MTK boot image required}")
 tag=${Q5_KERNEL_TAG:-d39}
-case "$tag" in d36|d37|d38|d39|d40|d41|d42) ;; *) echo "Unsupported kernel tag" >&2; exit 1;; esac
+case "$tag" in d36|d37|d38|d39|d40|d41|d42|d43) ;; *) echo "Unsupported kernel tag" >&2; exit 1;; esac
 work=${Q5_BUILD_WORK:-"$repo/work/$tag"}
 mkdir -p "$repo/out"
 python3 "$repo/build/prepare_kernel.py" "$checkout" "$work" --series "$repo/build/kernel-$tag.series" > "$repo/out/$tag-prepare.log"
@@ -23,6 +23,9 @@ if [ "$tag" != d36 ] && [ "$tag" != d37 ] && [ "$tag" != d38 ]; then
     python3 "$repo/build/test_touch_key_protocol.py" "$kernel"
 else
     python3 "$repo/build/test_touch_key_protocol.py" "$kernel" --legacy-reporting
+fi
+if [ "$tag" = d43 ]; then
+    python3 "$repo/build/test_wifi_mac.py" "$kernel"
 fi
 export KBUILD_BUILD_USER=codex KBUILD_BUILD_HOST="q5-$tag" KBUILD_BUILD_VERSION=1
 export KBUILD_BUILD_TIMESTAMP='2026-11-26 17:00:00 UTC'

@@ -14,6 +14,7 @@ import zipfile
 import struct
 import gzip
 from patch_fm_boot_node import entries
+from q5_runtime_defaults import disable_service
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -45,6 +46,9 @@ def main():
     init = next(data for name, data, *_ in entries(ramdisk) if name.lstrip('./') == 'init.mt6582.rc')
     assert b'mknod /dev/fm c 193' not in init, 'Apply patch_fm_boot_node.py before packaging'
     assert b'on property:init.svc.mediacodec=running' in init and b'q5-codec-limits.sh' in init, 'Apply patch_codec_boot.py before packaging'
+    modem = next(data for name, data, *_ in entries(ramdisk) if name.lstrip('./') == 'init.modem.rc')
+    for name in ['ccci_fsd', 'ccci_mdinit']:
+        assert disable_service(modem, name) == modem, 'Apply patch_wifi_only_boot.py before packaging'
     usb = next(data for name, data, *_ in entries(ramdisk) if name.lstrip('./') == 'init.mt6582.usb.rc')
     for mode in [b'mtp', b'mtp,adb']:
         action = re.search(rb'(?ms)^on property:sys.usb.config=' + mode + rb'\n.*?(?=^on |\Z)', usb)
@@ -59,10 +63,13 @@ def main():
         assert re.fullmatch(r'\d+\.\d+\.\d+', a.release_version)
         assert system_manifest['release_version'] == a.release_version
         assert '/etc/q5-release.json' in system_manifest['changes']
-    for required in ['/etc/q5-codec-limits.sh', '/lib/libq5.so',
+    for required in ['/etc/q5-wifi-address.sh', '/etc/q5-wifi-reconnect.sh',
+                     '/etc/init/q5-wifi-address.rc',
+                     '/etc/q5-codec-limits.sh', '/lib/libq5.so',
                      '/lib/libvcodec_utility.so', '/etc/media_codecs.xml',
                      '/priv-app/CMParts/CMParts.apk',
                      '/priv-app/Q5FMRadio/Q5FMRadio.apk',
+                     '/app/Q5PlexSignIn/Q5PlexSignIn.apk',
                      '/app/Q5AudioRecorder/Q5AudioRecorder.apk',
                      '/app/webview/webview.apk']:
         assert required in system_manifest['changes'], required

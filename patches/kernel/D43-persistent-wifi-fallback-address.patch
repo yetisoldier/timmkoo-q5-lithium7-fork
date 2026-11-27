@@ -1,0 +1,62 @@
+--- a/drivers/misc/mediatek/connectivity/conn_soc/drv_wlan/mt_wifi/wlan/os/linux/gl_kal.c
++++ b/drivers/misc/mediatek/connectivity/conn_soc/drv_wlan/mt_wifi/wlan/os/linux/gl_kal.c
+@@ -3228,12 +3228,45 @@
+  *         FALSE
+  */
+ /*----------------------------------------------------------------------------*/
++/* Q5 devices without a programmed MAC must not derive it from uptime.
++ * Read a per-device, locally administered fallback created once by init.
++ * Factory NVRAM/eFUSE addresses still take precedence. Never write NVRAM.
++ */
++static BOOLEAN
++q5ReadPersistentNetworkAddress(PARAM_MAC_ADDRESS *prMacAddr)
++{
++    struct file *file;
++    mm_segment_t oldfs;
++    loff_t offset = 0;
++    UINT_8 address[MAC_ADDR_LEN + 1];
++    ssize_t count;
++
++    oldfs = get_fs();
++    set_fs(get_ds());
++    file = filp_open("/data/misc/wifi/q5-stable-mac", O_RDONLY | O_NOFOLLOW, 0);
++    if (IS_ERR(file)) {
++        set_fs(oldfs);
++        return FALSE;
++    }
++    count = vfs_read(file, (char *)address, sizeof(address), &offset);
++    filp_close(file, NULL);
++    set_fs(oldfs);
++
++    /* Reject truncation, trailing bytes, multicast and globally assigned data. */
++    if (count != MAC_ADDR_LEN || (address[0] & 0x03) != 0x02)
++        return FALSE;
++    kalMemCopy(prMacAddr, address, MAC_ADDR_LEN);
++    return TRUE;
++}
++
+ BOOLEAN
+ kalRetrieveNetworkAddress(
+     IN P_GLUE_INFO_T prGlueInfo,
+     IN OUT PARAM_MAC_ADDRESS * prMacAddr
+     )
+ {
++    const UINT_8 aucZeroMacAddr[] = NULL_MAC_ADDR;
++
+     ASSERT(prGlueInfo);
+ 
+     if(prGlueInfo->fgIsMacAddrOverride == FALSE) {
+@@ -3256,8 +3289,11 @@
+ 		TC1_FAC_NAME(FacReadWifiMacAddr)((unsigned char *)prMacAddr);
+ 	#endif
+ 
+-        if(fgIsReadError == TRUE) {
+-            return FALSE;
++        if (fgIsReadError == TRUE || IS_BMCAST_MAC_ADDR(prMacAddr) ||
++                EQUAL_MAC_ADDR(aucZeroMacAddr, prMacAddr)) {
++            if (prGlueInfo->prAdapter->fgIsEmbbededMacAddrValid == FALSE)
++                return q5ReadPersistentNetworkAddress(prMacAddr);
++            return FALSE; /* The caller will retain the valid eFUSE address. */
+         }
+         else {
+             return TRUE;

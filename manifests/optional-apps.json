@@ -20,6 +20,19 @@
     "minSdk": 9,
     "targetSdk": 31
   },
+  "saga": {
+    "package": "com.gaut3.saga",
+    "name": "Saga (Plex audiobooks)",
+    "version": "1.2.0",
+    "versionCode": 31,
+    "url": "https://github.com/gaut3/saga/releases/download/v1.2.0/saga.apk",
+    "sha256": "2725f45d10da66b34d849869543ca7660df642860d7d8faf7a74df7e8db704cd",
+    "size": 57738274,
+    "minSdk": 24,
+    "abi": "universal, includes armeabi-v7a",
+    "install": "Optional userdata app, not bundled in system image",
+    "validation": "Publisher checksum verified; installs and opens to Plex sign-in. Authenticated playback unverified."
+  },
   "removed": [
     "net.sourceforge.opencamera",
     "de.robv.android.xposed.installer",
