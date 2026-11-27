@@ -139,3 +139,14 @@ on this development device.
 
 Audiobookshelf, Plexamp and Apple Music are separate userdata test installs, not
 bundled default system apps. No account credentials were entered or extracted.
+
+## Official v1.0.0 clean-install follow-up
+
+The separate clean-install pass is now complete through a recovery write of
+boot/system/logo, matching bounded readbacks and full internal-data/cache
+formats. Android booted from fresh app state as Q5 Gen 7 Lithium 7 v1.0.0.
+All 37 generated system files matched. The prior retained-package/UID warnings
+were absent, and the owner heard FM after the reset with the same software
+rendering/property combination. See the release manifest for final results.
+The remaining Bluetooth, battery, sensor, FM-extra and account-playback limits
+still apply.

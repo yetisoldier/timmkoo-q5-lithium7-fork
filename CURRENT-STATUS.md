@@ -1,9 +1,11 @@
 # Q5 Lithium 7 bring-up — 2026-11-26
 
-The user-confirmed working kernel is **D39**, on top of the published D33 chain.
-Touch, physical Home, speaker and headphone playback work. Native Home
-shortcuts and browser removal are installed. **Camera omitted per product evidence; no fitted sensor is confirmed.**
-This is a development build, not a fully functional release.
+**v1.0.0 is the first official community release for Q5 Gen 7 (Q5 Mint).**
+See [README.md](README.md), [installation](docs/INSTALL.md), and
+[release notes](docs/releases/v1.0.0.md) for customer-facing information.
+The current build uses D42-R3, retaining the D39 user-confirmed hardware fixes.
+Camera is omitted per product evidence; no fitted sensor is confirmed.
+The records below preserve the bring-up history and its validation limits.
 
 The current installed boot is **D42-R3** (D42 kernel, corrected FM, USB and codec startup ramdisk): D39 plus default-off camera
 diagnostics (D40–D42). D42 boots, passes the native Home policy regression,
@@ -337,3 +339,16 @@ in Music. Recordings, account data, adopted-volume keys and all other userdata
 are excluded from the checkpoint. Server sign-in, paired Bluetooth audio,
 FM speaker/Bluetooth routing, a full FM station scan and low-battery charging
 remain separate checks. No clean-install or factory-reset pass is claimed.
+
+## v1.0.0 clean installation
+
+A fresh versioned system image was built with the verified FM software path,
+then boot/system/logo were written through the existing TWRP recovery while
+Android was stopped. Bounded readbacks matched all three source images. TWRP
+formatted internal data and cache; packages.xml and old adopted-volume keys
+were absent before Android's first boot. The device booted as Q5 Gen 7 Lithium
+7 v1.0.0, and all 37 generated system files matched. The owner confirmed audible
+FM again after this clean installation. No old account or app data was restored.
+Release artifact hashes and the final checks are in
+`manifests/release-v1.0.0.json`. The historical development ZIPs above are
+superseded by `Q5-Gen7-Lithium7-v1.0.0.zip`.
