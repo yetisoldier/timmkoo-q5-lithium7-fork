@@ -1,0 +1,29 @@
+{
+  "fm": {
+    "package": "com.android.fmradio",
+    "name": "FM Radio (Lineage Android 7, Q5 kernel ABI)",
+    "source": "https://github.com/LineageOS/android_packages_apps_FMRadio",
+    "builder": "build/build_lineage_fm.py",
+    "install": "/system/priv-app/Q5FMRadio",
+    "reason": "Android 7 audio routing and music-stream volume controls, with the original Lithium receiver JNI adapted to this kernel's ioctl sizes. Requires persist.af.audio_patch_fm=1 and a privileged system install."
+  },
+  "recorder": {
+    "package": "com.github.axet.audiorecorder",
+    "name": "Audio Recorder",
+    "version": "3.5.23",
+    "versionCode": 379,
+    "url": "https://f-droid.org/repo/com.github.axet.audiorecorder_379.apk",
+    "source": "https://gitlab.com/axet/android-audio-recorder",
+    "sha256": "eba0e28fe6d502c919218912f077407eef952dc39d8df431df31a28683739cc5",
+    "license": "GPL-3.0-or-later",
+    "reason": "Mint SoundRecorder depends on missing legacy vendor APIs. This independent recorder successfully captured Ogg audio using the built-in microphone.",
+    "minSdk": 9,
+    "targetSdk": 31
+  },
+  "removed": [
+    "net.sourceforge.opencamera",
+    "de.robv.android.xposed.installer",
+    "org.lineageos.jelly",
+    "com.android.htmlviewer"
+  ]
+}

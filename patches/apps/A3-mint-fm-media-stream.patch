@@ -1,0 +1,64 @@
+--- a/com/mediatek/FMRadio/FMRadioActivity.smali
++++ b/com/mediatek/FMRadio/FMRadioActivity.smali
+@@ -5070,7 +5070,7 @@
+     iput-object v5, p0, Lcom/mediatek/FMRadio/FMRadioActivity;->mFragmentManager:Landroid/app/FragmentManager;
+ 
+     .line 839
+-    const/16 v5, 0xa
++    const/16 v5, 0x3
+ 
+     invoke-virtual {p0, v5}, Lcom/mediatek/FMRadio/FMRadioActivity;->setVolumeControlStream(I)V
+ 
+--- a/com/mediatek/FMRadio/FMRadioEMActivity.smali
++++ b/com/mediatek/FMRadio/FMRadioEMActivity.smali
+@@ -2087,7 +2087,7 @@
+     invoke-static {v1, v2}, Lcom/mediatek/FMRadio/LogUtils;->d(Ljava/lang/String;Ljava/lang/String;)I
+ 
+     .line 379
+-    const/16 v1, 0xa
++    const/16 v1, 0x3
+ 
+     invoke-virtual {p0, v1}, Lcom/mediatek/FMRadio/FMRadioEMActivity;->setVolumeControlStream(I)V
+ 
+--- a/com/mediatek/FMRadio/FMRadioFavorite.smali
++++ b/com/mediatek/FMRadio/FMRadioFavorite.smali
+@@ -615,7 +615,7 @@
+     invoke-static {v0, v1}, Lcom/mediatek/FMRadio/LogUtils;->d(Ljava/lang/String;Ljava/lang/String;)I
+ 
+     .line 114
+-    const/16 v0, 0xa
++    const/16 v0, 0x3
+ 
+     invoke-virtual {p0, v0}, Lcom/mediatek/FMRadio/FMRadioFavorite;->setVolumeControlStream(I)V
+ 
+--- a/com/mediatek/FMRadio/FMRadioService$3.smali
++++ b/com/mediatek/FMRadio/FMRadioService$3.smali
+@@ -148,7 +148,7 @@
+ 
+     move-result-object v3
+ 
+-    const/16 v4, 0xa
++    const/16 v4, 0x3
+ 
+     invoke-virtual {v3, v4}, Landroid/media/MediaPlayer;->setAudioStreamType(I)V
+ 
+--- a/com/mediatek/FMRadio/FMRadioService.smali
++++ b/com/mediatek/FMRadio/FMRadioService.smali
+@@ -6588,7 +6588,7 @@
+     .line 1550
+     iget-object v4, p0, Lcom/mediatek/FMRadio/FMRadioService;->mFMPlayer:Landroid/media/MediaPlayer;
+ 
+-    const/16 v5, 0xa
++    const/16 v5, 0x3
+ 
+     invoke-virtual {v4, v5}, Landroid/media/MediaPlayer;->setAudioStreamType(I)V
+ 
+@@ -7587,7 +7587,7 @@
+ 
+     iget-object v3, p0, Lcom/mediatek/FMRadio/FMRadioService;->mAudioFocusChangeListener:Landroid/media/AudioManager$OnAudioFocusChangeListener;
+ 
+-    const/16 v4, 0xa
++    const/16 v4, 0x3
+ 
+     invoke-virtual {v2, v3, v4, v1}, Landroid/media/AudioManager;->requestAudioFocus(Landroid/media/AudioManager$OnAudioFocusChangeListener;II)I
+ 

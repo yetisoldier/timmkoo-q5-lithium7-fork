@@ -1,0 +1,91 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -1017,30 +1017,55 @@
+ 	input_mt_sync(tpd->dev);
+ }
+ 
++static const int gsl_tp_keys[2] = { 172 /* KEY_HOMEPAGE */, 158 /* KEY_BACK */ };
++static const int gsl_tp_keys_dim[2][4] = {
++	{ 100, 900, 40, 40 },
++	{ 300, 900, 40, 40 },
++};
++
+ static void gsl_report_point(struct gsl_touch_info *ti)
+ {
+-	int tmp;
+-	static int gsl_up_flag;		/* prevent more than one up event */
+-
+-	if (unlikely(ti->finger_num == 0)) {
+-		if (gsl_up_flag == 0)
+-			return;
+-		gsl_up_flag = 0;
+-		tpd_up();
++	int tmp, k, key = -1, screen_contacts = 0;
++	static int screen_active;
++
++	for (tmp = 0; tmp < ti->finger_num && tmp < MAX_CONTACTS; tmp++) {
++		int x = ti->x[tmp], y = ti->y[tmp];
++
++		/* Firmware maps bezel keys to y=900. Reporting those contacts
++		 * on the display as well lets InputReader synthesize a second
++		 * virtual key (or a clamped bottom-edge touch). Send them only
++		 * through mtk-tpd-kpd, with normal key down/up semantics. */
++		if (x < 0 || x >= TPD_RES_X || y < 0 || y >= TPD_RES_Y) {
++			for (k = 0; k < ARRAY_SIZE(gsl_tp_keys); k++) {
++				if (x >= gsl_tp_keys_dim[k][0] - gsl_tp_keys_dim[k][2] / 2 &&
++				    x <= gsl_tp_keys_dim[k][0] + gsl_tp_keys_dim[k][2] / 2 &&
++				    y >= gsl_tp_keys_dim[k][1] - gsl_tp_keys_dim[k][3] / 2 &&
++				    y <= gsl_tp_keys_dim[k][1] + gsl_tp_keys_dim[k][3] / 2)
++					key = k;
++			}
++			continue;
++		}
++		tpd_down(ti->id[tmp] - 1, x, y, 0);
++		screen_contacts++;
++	}
++	if (screen_contacts) {
++		screen_active = 1;
++	} else if (screen_active) {
++		input_report_key(tpd->dev, BTN_TOUCH, 0);
++		input_mt_sync(tpd->dev);
++		screen_active = 0;
++	}
++	input_sync(tpd->dev);
++
++	if (key >= 0) {
++		/* Release a previous key if the contact slid into another key. */
++		if (tpd->btn_state != (1U << key))
++			tpd_button(0, 0, 0);
++		tpd_button(gsl_tp_keys_dim[key][0], gsl_tp_keys_dim[key][1], 1);
+ 	} else {
+-		gsl_up_flag = 1;
+-		for (tmp = 0; ti->finger_num > tmp; tmp++)
+-			tpd_down(ti->id[tmp] - 1, ti->x[tmp], ti->y[tmp], 0);
+-		/* D25 [BLOB c034d4f0] virtual keys fire on the touch-down branch
+-		 * only: the blob calls tpd_button(x, y, 1) inside contact 0's
+-		 * event stream (between the ABS_MT_POSITION_X and
+-		 * ABS_MT_TRACKING_ID reports) and has NO release-path call site
+-		 * anywhere — vendor-faithful is down-only here (the key rects
+-		 * sit at y=900, outside the 480x800 panel). Contact 0 carries
+-		 * the touch, so its RAW coordinates decide the key. */
+-		tpd_button(ti->x[0], ti->y[0], 1);
+-	}
+-	input_sync(tpd->dev);
++		/* Also releases when a bezel contact slides onto the display. */
++		tpd_button(0, 0, 0);
++	}
+ }
+ 
+ static void report_data_handle(void)
+@@ -1390,11 +1415,6 @@
+  * tpd_have_button = 1, the framework's tpd_button_init() registers the
+  * second input device "mtk-tpd-kpd" (tpd_button.c:56). */
+ #define TPD_HAVE_BUTTON 1	/* local: enables the blob's button glue */
+-static const int gsl_tp_keys[2] = { 172 /* KEY_HOMEPAGE */, 158 /* KEY_BACK */ };
+-static const int gsl_tp_keys_dim[2][4] = {
+-	{ 100, 900, 40, 40 },
+-	{ 300, 900, 40, 40 },
+-};
+ 
+ /* D25 [BLOB tpd_local_init @0xc034c344, E2] the framework's per-panel hook:
+  * boot-mode store → tpd_button_setting → i2c_add_driver (this synchronously

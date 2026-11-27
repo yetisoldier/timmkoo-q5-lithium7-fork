@@ -1,0 +1,57 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -162,6 +162,11 @@
+ extern void mt_eint_registration(unsigned int eint_num, unsigned int flow,
+ 				 void (EINT_FUNC_PTR)(void), unsigned int is_auto_umask);
+ 
++/* Bounded, opt-in raw/processed frame diagnostics. Zero by default. */
++static int debug_frames;
++module_param(debug_frames, int, 0600);
++MODULE_PARM_DESC(debug_frames, "Number of touch frames to log (diagnostic only)");
++
+ #define GSL_DEBUG	(0)
+ #if GSL_DEBUG
+ #define GSL_LOGD(fmt, args...)	printk("gsl_tp:[%04d]%s " fmt, __LINE__, __func__, ##args)
+@@ -991,6 +996,8 @@
+ 
+ static void tpd_up(void)
+ {
++	/* A virtual key is stateful: every press needs an all-fingers-up release. */
++	tpd_button(0, 0, 0);
+ 	input_report_key(tpd->dev, BTN_TOUCH, 0);
+ 	input_mt_sync(tpd->dev);
+ }
+@@ -1031,6 +1038,7 @@
+ 	u8 buf[4] = {0};
+ 	struct gsl_touch_info cinfo;
+ 	int tmp1;
++	bool debug_frame = debug_frames > 0;
+ #endif
+ 
+ 	if (gsl_proc_flag == 1)
+@@ -1074,7 +1082,16 @@
+ 	}
+ 	cinfo.finger_num = (touch_data[3] << 24) | (touch_data[2] << 16) |
+ 			(touch_data[1] << 8) | touch_data[0];
++	if (debug_frame) {
++		debug_frames--;
++		printk(TPD_DEVICE ": D35 raw=%02x%02x%02x%02x first=%02x%02x%02x%02x cfg=%d\n",
++			touch_data[0], touch_data[1], touch_data[2], touch_data[3],
++			touch_data[4], touch_data[5], touch_data[6], touch_data[7], gsl_dev.config_id);
++	}
+ 	gsl_alg_id_main(&cinfo);
++	if (debug_frame)
++		printk(TPD_DEVICE ": D35 processed n=%d x=%d y=%d id=%d\n",
++			cinfo.finger_num, cinfo.x[0], cinfo.y[0], cinfo.id[0]);
+ 	tmp1 = gsl_mask_tiaoping();
+ 	if (tmp1 > 0 && tmp1 < 0xffffffff) {
+ 		buf[0] = 0xa;
+@@ -1428,6 +1445,8 @@
+ 	gsl_dev.halt = 1;
+ 
+ 	mt_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
++	tpd_up();
++	input_sync(tpd->dev);
+ 	mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ZERO);
+ 	msleep(20);
+ }

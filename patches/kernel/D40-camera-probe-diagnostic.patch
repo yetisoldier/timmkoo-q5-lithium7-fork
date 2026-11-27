@@ -1,0 +1,80 @@
+--- a/drivers/misc/mediatek/imgsensor/src/mt6582/kd_sensorlist.c
++++ b/drivers/misc/mediatek/imgsensor/src/mt6582/kd_sensorlist.c
+@@ -1511,6 +1511,68 @@
+ /*******************************************************************************
+ * adopt_CAMERA_HW_CheckIsAlive
+ ********************************************************************************/
++/* Opt-in bring-up diagnostic. No sensor configuration writes. The normal
++ * front-slot power sequence and HAL clock setup remain responsible for power.
++ * Probe only camera candidate addresses, never the known touch/amp addresses.
++ * A failed probe does not establish that hardware is absent.
++ */
++static unsigned int q5_camera_probe_budget;
++module_param_named(camera_probe_budget, q5_camera_probe_budget, uint, 0600);
++MODULE_PARM_DESC(camera_probe_budget, "Bounded powered front-slot camera ID diagnostics (default off)");
++
++static void q5_camera_probe_candidates(void)
++{
++    static const u16 addresses[] = {0x20, 0x21, 0x24, 0x30, 0x31, 0x3c, 0x3d, 0x6e};
++    static const u8 registers[] = {0x00, 0x04, 0x0a, 0x0b, 0xf0, 0xf1};
++    struct i2c_adapter *adapter;
++    struct i2c_msg msg;
++    int bus, i, j, ret;
++    u8 value, reg;
++
++    if (!q5_camera_probe_budget ||
++        g_invokeSocketIdx[0] != DUAL_CAMERA_SUB_SENSOR)
++        return;
++    /* A root writer cannot accidentally request an unbounded scan. */
++    q5_camera_probe_budget = min(q5_camera_probe_budget, 4U) - 1;
++    pr_info("Q5CAM begin front power-template=%s remaining=%u\n",
++            g_invokeSensorNameStr[0], q5_camera_probe_budget);
++    for (bus = 0; bus <= 1; bus++) {
++        adapter = i2c_get_adapter(bus);
++        if (!adapter)
++            continue;
++        for (i = 0; i < ARRAY_SIZE(addresses); i++) {
++            memset(&msg, 0, sizeof(msg));
++            msg.addr = addresses[i];
++            msg.flags = I2C_M_RD;
++            msg.len = 1;
++            msg.buf = &value;
++            msg.timing = 100;
++            value = 0;
++            ret = i2c_transfer(adapter, &msg, 1);
++            pr_info("Q5CAM bus=%d addr=%02x read-ret=%d value=%02x\n",
++                    bus, addresses[i], ret, value);
++            if (ret != 1)
++                continue;
++            for (j = 0; j < ARRAY_SIZE(registers); j++) {
++                reg = registers[j];
++                msg.flags = 0;
++                msg.buf = &reg;
++                ret = i2c_transfer(adapter, &msg, 1);
++                value = 0;
++                if (ret == 1) {
++                    msg.flags = I2C_M_RD;
++                    msg.buf = &value;
++                    ret = i2c_transfer(adapter, &msg, 1);
++                }
++                pr_info("Q5CAM bus=%d addr=%02x reg=%02x ret=%d value=%02x\n",
++                        bus, addresses[i], reg, ret, value);
++            }
++        }
++        i2c_put_adapter(adapter);
++    }
++    pr_info("Q5CAM end\n");
++}
++
+ inline static int adopt_CAMERA_HW_CheckIsAlive(void)
+ {
+     UINT32 err = 0;
+@@ -1528,6 +1590,8 @@
+     //wait for power stable
+     mDELAY(10);
+     KD_IMGSENSOR_PROFILE("kdModulePowerOn");
++
++    q5_camera_probe_candidates();
+ 
+     if (g_pSensorFunc) {
+         for ( i = KDIMGSENSOR_INVOKE_DRIVER_0 ; i < KDIMGSENSOR_MAX_INVOKE_DRIVERS ; i++ ) {

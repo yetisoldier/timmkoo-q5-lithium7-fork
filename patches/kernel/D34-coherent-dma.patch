@@ -1,0 +1,84 @@
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -130,6 +130,7 @@
+ #include <linux/module.h>
+ #include <linux/delay.h>
+ #include <linux/i2c.h>
++#include <linux/dma-mapping.h>
+ #include <linux/input.h>
+ #include <linux/slab.h>
+ #include <linux/gpio.h>
+@@ -348,7 +349,8 @@
+ 	}
+ 
+ 	{
+-		u8 *staged = kmalloc(num, GFP_KERNEL);
++		dma_addr_t dma_handle;
++		u8 *staged = dma_alloc_coherent(NULL, num, &dma_handle, GFP_KERNEL);
+ 
+ 		if (!staged)
+ 			return -ENOMEM;
+@@ -356,12 +358,12 @@
+ 		msg.addr = (client->addr & I2C_MASK_FLAG) | I2C_DMA_FLAG;
+ 		msg.len = (u16)num;
+ 		msg.flags = I2C_M_RD | (client->flags & I2C_M_TEN);
+-		msg.buf = (u8 *)virt_to_phys(staged);	/* DMA needs a physical address */
++		msg.buf = (u8 *)dma_handle;
+ 		msg.timing = 400;
+ 		ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
+ 		if (ret == 0)
+ 			memcpy(buf, staged, num);
+-		kfree(staged);
++		dma_free_coherent(NULL, num, staged, dma_handle);
+ 		return ret;
+ 	}
+ }
+@@ -380,6 +382,7 @@
+ {
+ 	struct i2c_msg msg;
+ 	u8 *staged;
++	dma_addr_t dma_handle = 0;
+ 	u32 total = (u32)num + 1;
+ 	int ret;
+ 
+@@ -390,7 +393,12 @@
+ 
+ 	/* D27/D28/D30: plain transfer up to 8 bytes; DMA (physical address) above.
+ 	 * Staging keeps the caller payload untouched and the register byte first. */
+-	staged = kmalloc(total, GFP_KERNEL);
++	/* The active adapter is mtk_i2c_transfer, NOT standard_i2c_transfer.
++	 * It consumes the supplied physical address without cache maintenance.
++	 * Match the adapter's NULL-device coherent allocation convention. */
++	staged = total > 8
++		? dma_alloc_coherent(NULL, total, &dma_handle, GFP_KERNEL)
++		: kmalloc(total, GFP_KERNEL);
+ 	if (!staged)
+ 		return -ENOMEM;
+ 	staged[0] = reg;
+@@ -403,13 +411,16 @@
+ 	msg.timing = 400;
+ 	if (total > 8) {
+ 		msg.addr |= I2C_DMA_FLAG;
+-		msg.buf = (u8 *)virt_to_phys(staged);
++		msg.buf = (u8 *)dma_handle;
+ 	} else {
+ 		msg.buf = staged;
+ 	}
+ 
+ 	ret = i2c_transfer(client->adapter, &msg, 1) == 1 ? 0 : -EFAULT;
+-	kfree(staged);
++	if (total > 8)
++		dma_free_coherent(NULL, total, staged, dma_handle);
++	else
++		kfree(staged);
+ 	return ret;
+ }
+ 
+@@ -1456,6 +1467,7 @@
+ 	int ret;
+ 
+ 	GSL_LOGF();
++	printk(TPD_DEVICE ": D34 coherent DMA buffers enabled\n");
+ 
+ 	/* [BLOB gsl_probe @0xc034e048, E4/E5/E6] probe order: five-rail power
+ 	 * (D24 bytes, unchanged) → reset pulse GPIO14 + INT GPIO2 pull-up +

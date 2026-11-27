@@ -1,0 +1,22 @@
+--- a/cyanogenmod/providers/CMSettings$System.smali
++++ b/cyanogenmod/providers/CMSettings$System.smali
+@@ -561,7 +561,8 @@
+     .line 1018
+     new-instance v0, Lcyanogenmod/providers/CMSettings$InclusiveIntegerRangeValidator;
+ 
+-    invoke-direct {v0, v5, v7}, Lcyanogenmod/providers/CMSettings$InclusiveIntegerRangeValidator;-><init>(II)V
++    const/16 v1, 0xd
++    invoke-direct {v0, v5, v1}, Lcyanogenmod/providers/CMSettings$InclusiveIntegerRangeValidator;-><init>(II)V
+ 
+     .line 1017
+     sput-object v0, Lcyanogenmod/providers/CMSettings$System;->KEY_HOME_LONG_PRESS_ACTION_VALIDATOR:Lcyanogenmod/providers/CMSettings$Validator;
+@@ -569,7 +570,8 @@
+     .line 1029
+     new-instance v0, Lcyanogenmod/providers/CMSettings$InclusiveIntegerRangeValidator;
+ 
+-    invoke-direct {v0, v5, v7}, Lcyanogenmod/providers/CMSettings$InclusiveIntegerRangeValidator;-><init>(II)V
++    const/16 v1, 0xd
++    invoke-direct {v0, v5, v1}, Lcyanogenmod/providers/CMSettings$InclusiveIntegerRangeValidator;-><init>(II)V
+ 
+     .line 1028
+     sput-object v0, Lcyanogenmod/providers/CMSettings$System;->KEY_HOME_DOUBLE_TAP_ACTION_VALIDATOR:Lcyanogenmod/providers/CMSettings$Validator;

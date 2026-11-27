@@ -1,0 +1,17 @@
+# D38: preserve read-only kernel text, use the static-key fallback.
+# Device evidence: ping triggers net_enable_timestamp -> static_key_slow_inc
+# -> arch_jump_label_transform -> patch_text, which stores into RO text and
+# panics (ARM permission fault 0x80f). This tree's patch.c predates the ARM
+# fixmap text-patching implementation. Disable the optional runtime branch
+# rewriting optimization; retain CONFIG_DEBUG_RODATA=y.
+--- a/arch/arm/configs/q5_defconfig
++++ b/arch/arm/configs/q5_defconfig
+@@ -169,7 +169,7 @@
+ CONFIG_TRACEPOINTS=y
+ CONFIG_OPROFILE=y
+ CONFIG_HAVE_OPROFILE=y
+-CONFIG_JUMP_LABEL=y
++# CONFIG_JUMP_LABEL is not set
+ # CONFIG_HAVE_64BIT_ALIGNED_ACCESS is not set
+ CONFIG_HAVE_KPROBES=y
+ CONFIG_HAVE_KRETPROBES=y

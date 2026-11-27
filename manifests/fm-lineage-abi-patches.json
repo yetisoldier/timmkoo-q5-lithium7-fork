@@ -1,0 +1,126 @@
+{
+  "input": "fd46969703e4b4c9ed08f173db07886760a13989b494ce2932cc6e6fa3fff6c1",
+  "output": "c009d44270bc948df7f537d1a24ce59ce4930d902db3c6a061f75a146310353f",
+  "changes": [
+    {
+      "name": "FM_IOCTL_POWERUP",
+      "offset": "0x3fe8",
+      "old": "0xc004f500",
+      "new": "0xc006f500",
+      "before": "ccf20401",
+      "after": "ccf20601"
+    },
+    {
+      "name": "FM_IOCTL_TUNE",
+      "offset": "0x4464",
+      "old": "0xc004f502",
+      "new": "0xc006f502",
+      "before": "ccf20401",
+      "after": "ccf20601"
+    },
+    {
+      "name": "FM_IOCTL_SEEK",
+      "offset": "0x4538",
+      "old": "0xc004f503",
+      "new": "0xc008f503",
+      "before": "ccf20401",
+      "after": "ccf20801"
+    },
+    {
+      "name": "FM_IOCTL_SOFT_MUTE_TUNE",
+      "offset": "0x47c8",
+      "old": "0xc004f53f",
+      "new": "0xc00cf53f",
+      "before": "ccf20401",
+      "after": "ccf20c01"
+    },
+    {
+      "name": "FM_IOCTL_CQI_GET",
+      "offset": "0x485e",
+      "old": "0xc004f527",
+      "new": "0xc00cf527",
+      "before": "ccf20401",
+      "after": "ccf20c01"
+    },
+    {
+      "name": "FM_IOCTL_RDS_ONOFF",
+      "offset": "0x48fc",
+      "old": "0xc004f512",
+      "new": "0xc002f512",
+      "before": "ccf20401",
+      "after": "ccf20201"
+    },
+    {
+      "name": "FM_IOCTL_RDS_ONOFF",
+      "offset": "0x4922",
+      "old": "0xc004f512",
+      "new": "0xc002f512",
+      "before": "ccf20401",
+      "after": "ccf20201"
+    },
+    {
+      "name": "FM_IOCTL_GETCHIPID",
+      "offset": "0x49ce",
+      "old": "0xc004f50a",
+      "new": "0xc002f50a",
+      "before": "ccf20401",
+      "after": "ccf20201"
+    },
+    {
+      "name": "FM_IOCTL_GETCURPAMD",
+      "offset": "0x4b76",
+      "old": "0xc004f50e",
+      "new": "0xc002f50e",
+      "before": "ccf20401",
+      "after": "ccf20201"
+    },
+    {
+      "name": "FM_IOCTL_RDS_ONOFF",
+      "offset": "0x4bac",
+      "old": "0xc004f512",
+      "new": "0xc002f512",
+      "before": "ccf20401",
+      "after": "ccf20201"
+    },
+    {
+      "name": "FM_IOCTL_TUNE",
+      "offset": "0x4be6",
+      "old": "0xc004f502",
+      "new": "0xc006f502",
+      "before": "ccf20401",
+      "after": "ccf20601"
+    },
+    {
+      "name": "FM_IOCTL_GETCURPAMD",
+      "offset": "0x4c04",
+      "old": "0xc004f50e",
+      "new": "0xc002f50e",
+      "before": "ccf20401",
+      "after": "ccf20201"
+    },
+    {
+      "name": "FM_IOCTL_TUNE",
+      "offset": "0x4c86",
+      "old": "0xc004f502",
+      "new": "0xc006f502",
+      "before": "ccf20401",
+      "after": "ccf20601"
+    },
+    {
+      "name": "FM_IOCTL_RDS_ONOFF",
+      "offset": "0x4ca2",
+      "old": "0xc004f512",
+      "new": "0xc002f512",
+      "before": "ccf20401",
+      "after": "ccf20201"
+    },
+    {
+      "name": "FM_IOCTL_DESENSE_CHECK",
+      "offset": "0x4e3c",
+      "old": "0xc004f540",
+      "new": "0xc008f540",
+      "before": "ccf20401",
+      "after": "ccf20801"
+    }
+  ]
+}

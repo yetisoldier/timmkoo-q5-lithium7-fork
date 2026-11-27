@@ -1,5 +1,23 @@
 # TIMMKOO Q5 — Lithium 7 Fork: Handoff & Touch Bring-Up Log
 
+> **Codex update, 2026-11-26:** The old touch-blocker diagnosis below is
+> superseded. **D34 fixes touch with coherent DMA buffers. D36 fixes speaker
+> initialization and the legacy speaker-on/off hooks.** The user confirmed
+> physical touch, clear speaker playback, and speaker playback after unplugging
+> headphones and pressing Play. On-screen navigation is enabled by default;
+> the gnome splash, boot display and default wallpaper are installed. **D37 adds
+> the missing Mint touch variants; D39 fixes duplicate bezel/touch Home events.**
+> The user confirmed repeated quick taps now go Home normally. D38 also fixes
+> a network-triggered kernel crash. Native Home shortcuts are installed: tap
+> Home, double-tap Back, hold Recents, with navigation visible. Browser APKs are
+> removed from system. Subsequent audit adds FM, a voice recorder and a
+> Settings navigation visibility switch; see [FUNCTIONAL-AUDIT.md](FUNCTIONAL-AUDIT.md).
+> Camera is omitted per purchase evidence. The prior Hynix
+> identification was incorrect (Hyn_device belongs to the touch controller). See
+> [CURRENT-STATUS.md](CURRENT-STATUS.md) for evidence, hashes and reproduction.
+>
+> Everything below is Hera's historical handoff, retained for provenance.
+
 > **Status at handoff (2026-11-26):** Touch is NOT yet working. Transport, power,
 > display, buttons, MBR and framework are all fixed and verified. The single open
 > problem is that the GSL touch controller's **firmware will not boot** (alive

@@ -1,0 +1,192 @@
+{
+  "input": "5c735b833d85719af4d7866346db7b3e9025a078f0df1466ae8fa4493316de53",
+  "output": "5c730dbd6532be1f4f7071e51784d8ff85983ad34902cbfa386811b2ea18809d",
+  "changes": [
+    {
+      "offset": "0x1ca0",
+      "name": "FM_IOCTL_POWERUP",
+      "old": "0xc004f500",
+      "new": "0xc006f500"
+    },
+    {
+      "offset": "0x1d84",
+      "name": "FM_IOCTL_GETCHIPID",
+      "old": "0xc004f50a",
+      "new": "0xc002f50a"
+    },
+    {
+      "offset": "0x2180",
+      "name": "FM_IOCTL_TUNE",
+      "old": "0xc004f502",
+      "new": "0xc006f502"
+    },
+    {
+      "offset": "0x21f0",
+      "name": "FM_IOCTL_SEEK",
+      "old": "0xc004f503",
+      "new": "0xc008f503"
+    },
+    {
+      "offset": "0x2430",
+      "name": "FM_IOCTL_SCAN_NEW",
+      "old": "0xc004f53c",
+      "new": "0xc020f53c"
+    },
+    {
+      "offset": "0x24b0",
+      "name": "FM_IOCTL_SEEK_NEW",
+      "old": "0xc004f53d",
+      "new": "0xc01cf53d"
+    },
+    {
+      "offset": "0x24fc",
+      "name": "FM_IOCTL_TUNE_NEW",
+      "old": "0xc004f53e",
+      "new": "0xc014f53e"
+    },
+    {
+      "offset": "0x2584",
+      "name": "FM_IOCTL_SOFT_MUTE_TUNE",
+      "old": "0xc004f53f",
+      "new": "0xc00cf53f"
+    },
+    {
+      "offset": "0x272c",
+      "name": "FM_IOCTL_SCAN",
+      "old": "0xc004f508",
+      "new": "0xc028f508"
+    },
+    {
+      "offset": "0x2730",
+      "name": "FM_IOCTL_SCAN_GETRSSI",
+      "old": "0xc004f524",
+      "new": "0xc804f524"
+    },
+    {
+      "offset": "0x2784",
+      "name": "FM_IOCTL_SCAN_GETRSSI",
+      "old": "0xc004f524",
+      "new": "0xc804f524"
+    },
+    {
+      "offset": "0x27e0",
+      "name": "FM_IOCTL_CQI_GET",
+      "old": "0xc004f527",
+      "new": "0xc00cf527"
+    },
+    {
+      "offset": "0x2894",
+      "name": "FM_IOCTL_SEEK",
+      "old": "0xc004f503",
+      "new": "0xc008f503"
+    },
+    {
+      "offset": "0x2928",
+      "name": "FM_IOCTL_RDS_ONOFF",
+      "old": "0xc004f512",
+      "new": "0xc002f512"
+    },
+    {
+      "offset": "0x2b30",
+      "name": "FM_IOCTL_GETCURPAMD",
+      "old": "0xc004f50e",
+      "new": "0xc002f50e"
+    },
+    {
+      "offset": "0x2b34",
+      "name": "FM_IOCTL_RDS_ONOFF",
+      "old": "0xc004f512",
+      "new": "0xc002f512"
+    },
+    {
+      "offset": "0x2b38",
+      "name": "FM_IOCTL_TUNE",
+      "old": "0xc004f502",
+      "new": "0xc006f502"
+    },
+    {
+      "offset": "0x2ca4",
+      "name": "FM_IOCTL_RDS_ONOFF",
+      "old": "0xc004f512",
+      "new": "0xc002f512"
+    },
+    {
+      "offset": "0x2ca8",
+      "name": "FM_IOCTL_GETCURPAMD",
+      "old": "0xc004f50e",
+      "new": "0xc002f50e"
+    },
+    {
+      "offset": "0x2cac",
+      "name": "FM_IOCTL_TUNE",
+      "old": "0xc004f502",
+      "new": "0xc006f502"
+    },
+    {
+      "offset": "0x2d64",
+      "name": "FM_IOCTL_RDS_ONOFF",
+      "old": "0xc004f512",
+      "new": "0xc002f512"
+    },
+    {
+      "offset": "0x2d68",
+      "name": "FM_IOCTL_TUNE",
+      "old": "0xc004f502",
+      "new": "0xc006f502"
+    },
+    {
+      "offset": "0x2e40",
+      "name": "FM_IOCTL_POWERUP_TX",
+      "old": "0xc004f514",
+      "new": "0xc006f514"
+    },
+    {
+      "offset": "0x2ea0",
+      "name": "FM_IOCTL_TUNE_TX",
+      "old": "0xc004f515",
+      "new": "0xc006f515"
+    },
+    {
+      "offset": "0x2f38",
+      "name": "FM_IOCTL_TX_SCAN",
+      "old": "0xc004f51c",
+      "new": "0xc01ef51c"
+    },
+    {
+      "offset": "0x30cc",
+      "name": "FM_IOCTL_RDS_TX",
+      "old": "0xc004f516",
+      "new": "0xc0ccf516"
+    },
+    {
+      "offset": "0x31b8",
+      "name": "FM_IOCTL_GETBLERRATIO",
+      "old": "0xc004f511",
+      "new": "0xc002f511"
+    },
+    {
+      "offset": "0x3210",
+      "name": "FM_IOCTL_GETMONOSTERO",
+      "old": "0xc004f50d",
+      "new": "0xc002f50d"
+    },
+    {
+      "offset": "0x32e8",
+      "name": "FM_IOCTL_GET_HW_INFO",
+      "old": "0xc004f528",
+      "new": "0xc014f528"
+    },
+    {
+      "offset": "0x3390",
+      "name": "FM_IOCTL_DESENSE_CHECK",
+      "old": "0xc004f540",
+      "new": "0xc008f540"
+    },
+    {
+      "offset": "0x33c8",
+      "name": "FM_IOCTL_SET_SEARCH_THRESHOLD",
+      "old": "0xc004f52f",
+      "new": "0xc00cf52f"
+    }
+  ]
+}

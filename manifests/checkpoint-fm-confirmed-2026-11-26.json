@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-26",
+  "status": "development; FM headphone listening user-confirmed; clean-install validation outstanding",
+  "archive": "Q5-Mint-Lithium7-D42-R3-FM-confirmed-development-20261126.zip",
+  "archive_sha256": "ec30bbe147f8943c333a6cc0680688e75f07452777c61036376dccf734e7cfef",
+  "files": {
+    "boot.img": {
+      "bytes": 16777216,
+      "sha256": "e54b023a3fd941c74d1ecf479412994cf74c595e719eb5f9f1eb9ae5cf617a44"
+    },
+    "logo.bin": {
+      "bytes": 3145728,
+      "sha256": "8dfee5d07788fdcd019d4c9963b05f6f54de0e251d2909a01b612a771eb4ac02"
+    },
+    "MT6582_Android_scatter.txt": {
+      "bytes": 7254,
+      "sha256": "1824be75040f492077d50942d964e44d17a3fea2d1e5d6f1a811cb1ba18d848e"
+    },
+    "README.txt": {
+      "bytes": 2061,
+      "sha256": "1055dfea5dd84abbbf18b90d372e3b812e44933d175b050896fbc607b1378c26"
+    },
+    "system-build.json": {
+      "bytes": 4530,
+      "sha256": "8aa2ffa65156b13c60f0d3559aa2375e29b47815c660a455d95b7a483d3dbd09"
+    },
+    "system.img": {
+      "bytes": 761761792,
+      "sha256": "e4e54cde86cd5cbb0c4e8738f5afca67b209392c7b867895bb3e7e766455db98"
+    }
+  },
+  "live_system_changed_files_checked": 36,
+  "live_system_changed_file_mismatches": 0,
+  "fm": {
+    "package": "com.android.fmradio",
+    "apk_sha256": "e577b65c20159f544778eba7cfb4f712e83e585278971acf3353cebd123fb7ed",
+    "software_rendering": true,
+    "persist.af.audio_patch_fm": "1",
+    "user_confirmed": "Audible radio on 93.7 through wired headphones, including after pause/resume and volume regression."
+  },
+  "remaining_checks": [
+    "user server/account playback",
+    "paired Bluetooth audio/reconnect/headset controls",
+    "FM speaker/Bluetooth routing and full station scan",
+    "low-battery charging/discharge/unplugged deep sleep",
+    "clean-install/factory-reset validation"
+  ],
+  "userdata": "Excluded. Preserve adopted-storage keys and user recordings."
+}

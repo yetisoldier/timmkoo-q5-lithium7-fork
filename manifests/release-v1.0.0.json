@@ -1,0 +1,125 @@
+{
+  "version": "1.0.0",
+  "tag": "v1.0.0",
+  "name": "Lithium 7 for Q5 Gen 7 (Q5 Mint)",
+  "date": "2026-11-26",
+  "status": "first official community release",
+  "assets": {
+    "Q5-Gen7-Lithium7-v1.0.0.zip": {
+      "bytes": 325828797,
+      "sha256": "ef9a70e5b31773882f97ed0e547c944f4525fc2eed463c176105757aba68804d"
+    },
+    "Q5-Gen7-Lithium7-v1.0.0-kernel-source.tar.gz": {
+      "bytes": 133723132,
+      "sha256": "21b32fd1caea40207747c37084e61d0c61f9ff9248f00084848dc24c91a0db5f"
+    },
+    "AudioRecorder-3.5.23-source.tar.gz": {
+      "bytes": 181097,
+      "sha256": "e74dc61759a7c50780a6875f96661d0bc66f96b4c66fc5396768c2feeb3a08b1"
+    }
+  },
+  "firmware_files": {
+    "boot.img": {
+      "bytes": 16777216,
+      "sha256": "e54b023a3fd941c74d1ecf479412994cf74c595e719eb5f9f1eb9ae5cf617a44"
+    },
+    "docs/BUILDING.md": {
+      "bytes": 3479,
+      "sha256": "d18e4974131cd9fb40890eeb53af6eb2a49bf32f5565bfc129bb137d97e02443"
+    },
+    "docs/images/fm-v1.0.0.png": {
+      "bytes": 26387,
+      "sha256": "6cb753e6b7534139c3c9028ba9b8c39989d3fa42fed95bfe98ac3c0868f50eef"
+    },
+    "docs/images/home-v1.0.0.png": {
+      "bytes": 539965,
+      "sha256": "7e85267be367d19c44e47602ba79036d4c48e119b18d0b27fd11c06d7acf7df1"
+    },
+    "docs/images/navigation-v1.0.0.png": {
+      "bytes": 48270,
+      "sha256": "b9cd6bc5dfbc6d2baa1739ada0c7616c60c08040fff809495c617577c8d94abd"
+    },
+    "docs/INSTALL.md": {
+      "bytes": 4728,
+      "sha256": "c8d71387ff87196ae8cdb4410e48688bc1f1419f7ca0f68308882cbb51613453"
+    },
+    "docs/licenses/Apache-2.0.txt": {
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "docs/licenses/AudioRecorder-LICENSE.txt": {
+      "bytes": 35107,
+      "sha256": "1ae84b4fe0c797eabace59dee86c8ac3f644dd6f6e9f074d6f083b29d86a59b3"
+    },
+    "docs/licenses/Linux-COPYING.txt": {
+      "bytes": 18693,
+      "sha256": "af8067302947c01fd9eee72befa54c7e3ef8a48fecde7fd71277f2290b2bf0f7"
+    },
+    "docs/releases/v1.0.0.md": {
+      "bytes": 2657,
+      "sha256": "7c248bd4ca9c79344e47b3f2f583f13c8610b0dcf1607a29f755d677f932e4ce"
+    },
+    "install-adb-recovery.py": {
+      "bytes": 4696,
+      "sha256": "f08b43711a5f0d4796460f4f0b67270e2d9e23e34de1a3f54f6ce57f9c1809fb"
+    },
+    "logo.bin": {
+      "bytes": 3145728,
+      "sha256": "8dfee5d07788fdcd019d4c9963b05f6f54de0e251d2909a01b612a771eb4ac02"
+    },
+    "MT6582_Android_scatter.txt": {
+      "bytes": 7254,
+      "sha256": "1824be75040f492077d50942d964e44d17a3fea2d1e5d6f1a811cb1ba18d848e"
+    },
+    "README.md": {
+      "bytes": 6558,
+      "sha256": "aee2c711d58583f8e3313819a83a806d050efd7cb29a8f6d19c96771bbc70791"
+    },
+    "README.txt": {
+      "bytes": 4875,
+      "sha256": "65b63c8657af28d404bc2e9fc9f73acffadea4d119d4ca15eedc06d7534a6f4b"
+    },
+    "system-build.json": {
+      "bytes": 4658,
+      "sha256": "cc75c5290c1502e968ec87b287ebe0793c96682309f708d9f7c92e5ab7a9684c"
+    },
+    "system.img": {
+      "bytes": 761761792,
+      "sha256": "0b5769d4ab571f6b028d93e30fe11faaba67504cb850df15fb18520d74ea95fe"
+    },
+    "THIRD-PARTY-NOTICES.md": {
+      "bytes": 2918,
+      "sha256": "117c194c83df96034fddf9e77315c0b83db64e878c63291bbe10b2cbd45de7db"
+    }
+  },
+  "clean_install": {
+    "method": "Existing TWRP 3.6.0_9-0 root ADB; install_adb_recovery.py",
+    "written": [
+      "BOOTIMG",
+      "ANDROID",
+      "LOGO"
+    ],
+    "readback": "All three complete image extents match SHA-256",
+    "reset": "TWRP format data and wipe cache; old packages.xml/adopted keys absent before first boot",
+    "android_boot_completed": true,
+    "generated_system_files_matched": 37,
+    "mismatches": 0,
+    "navigation_default": "Visible with navigation_bar_visible unset",
+    "navigation_switch": "OFF then ON passed",
+    "home_shortcuts": "Injected tap Home, double Back, hold Recents pass",
+    "browser_handlers": 0,
+    "retained_package_uid_warnings": "Absent",
+    "FM": "Owner confirmed hearing FM again after clean flash",
+    "storage": "Internal data and current primary shared storage fixtures matched; removed afterward",
+    "screenshots": "Clean v1.0.0 home, navigation settings and FM, captured before optional client reinstalls"
+  },
+  "unchanged_audio_hal_sha256": "a7cc2dbe2cc2b8fd9c06d86f6f9479670a16e66bacc8941660ac81d6a370463e",
+  "remaining_checks": [
+    "paired Bluetooth audio/reconnect/headset controls",
+    "low-battery charging/battery life/unplugged deep sleep",
+    "FM speaker/Bluetooth output/full station scan",
+    "other sensor behavior",
+    "third-party server/account/offline/DRM playback"
+  ],
+  "userdata": "Not included in release; optional clients installed separately with fresh data after clean validation."
+}
