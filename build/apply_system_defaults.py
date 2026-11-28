@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from patch_arsc_values import read_named_values
 from prune_features import prune
 from q5_runtime_defaults import normalize_properties, disable_service
 from build_wifi_only import build as build_wifi_only
@@ -33,6 +34,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     for arg in ['input', 'out', 'branding', 'gestures', 'fm', 'recorder', 'media', 'webview', 'signin']:
         p.add_argument('--' + arg, required=True, type=Path)
+    p.add_argument('--settingsprovider', type=Path,
+                   help='T2-patched SettingsProvider APK carrying def_wifi_sleep_policy=0')
     p.add_argument('--release-version', help='Official Q5 Gen 7 semantic version')
     a = p.parse_args()
     if a.release_version:
@@ -56,6 +59,13 @@ def main():
     media_manifest = json.loads((a.media / 'media-compat-manifest.json').read_text())
     for name, expected in media_manifest['outputs'].items():
         assert sha(a.media / name) == expected, name
+    if a.settingsprovider:
+        sleep_policy = read_named_values(a.settingsprovider, 'def_wifi_sleep_policy')
+        assert sleep_policy, 'SettingsProvider donor must define def_wifi_sleep_policy'
+        assert all(hit['type_name'] == 'integer' and hit['dtype'] == 0x10
+                   and hit['value'] == 0 for hit in sleep_policy), \
+            'SettingsProvider donor must already read def_wifi_sleep_policy=0 ' \
+            '(run the T2 arsc patch first, spec §5.2)'
     a.out.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(a.input, a.out)
     changes = {}
@@ -132,6 +142,16 @@ def main():
                              ('q5-wifi-reconnect.sh', '/etc/q5-wifi-reconnect.sh'),
                              ('q5-wifi-address.rc', '/etc/init/q5-wifi-address.rc')]:
             put(Path(__file__).resolve().parent / name, remote)
+        # ARSC guard (§5.4): branding ran on the T1-patched donor, not an unpatched one.
+        res_guard = tmp / 'guard-framework-res.apk'
+        extract('/framework/framework-res.apk', res_guard)
+        voice_capable = read_named_values(res_guard, 'config_voice_capable')
+        assert voice_capable, 'framework-res.apk must define config_voice_capable'
+        assert all(hit['type_name'] == 'bool' and hit['dtype'] == 0x12
+                   and hit['value'] == 0 for hit in voice_capable), \
+            'framework-res.apk read back from the image must read config_voice_capable=false'
+        if a.settingsprovider:
+            put(a.settingsprovider, '/priv-app/SettingsProvider/SettingsProvider.apk')
         for name in ['libMtkOmxVdec.so', 'libstagefright.so', 'libmhalImageCodec.so',
                      'libmmprofile.so', 'libq5.so', 'libvcodec_utility.so']:
             put(a.media / name, '/lib/' + name)
@@ -190,6 +210,11 @@ def main():
         assert len(re.findall(pattern, data)) <= 1
         data = (re.sub(pattern, key + '=1', data) if re.search(pattern, data)
                 else data.rstrip('\n') + '\n' + key + '=1\n')
+        key = 'ro.radio.noril'
+        pattern = r'(?m)^' + re.escape(key) + r'=.*$'
+        assert len(re.findall(pattern, data)) <= 1
+        data = (re.sub(pattern, key + '=true', data) if re.search(pattern, data)
+                else data.rstrip('\n') + '\n' + key + '=true\n')
         if a.release_version:
             properties = {
                 'ro.build.display.id': 'Q5 Gen 7 Lithium 7 v' + a.release_version,

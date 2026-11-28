@@ -1,0 +1,31 @@
+# D46 — m5 power: bound the WLAN AHB ISR suspend window 100ms -> 20ms.
+# Spec (binding): .specs/bob-m5-power-audio-spec.md §1.1 item 3, §2
+# (ADR-m5-WS1 option W1/K4); DELTA-NOTES: patches/kernel/DELTA-NOTES.md
+# "D46"; revert criterion §8 R3.
+#
+# kalHifAhbKalWakeLockTimeout held rAhbIsrWakeLock for HZ/10 (100 ms) around
+# every ISR burst; at idle that dominated the anti-deep-sleep budget after
+# D45 kills the event0 storm. 20 ms keeps the ISR wake window short without
+# touching the ISR itself. NOTHING else in the connectivity tree changes:
+# HifAhbISR/HifAhbPltmSuspend/Resume, the tx thread, wakelock names
+# ("WLAN AHB ISR"/"WLAN TX THREAD") and the q5_defconfig CONSYS_6582
+# selection are all untouched (build gates assert).
+--- a/drivers/misc/mediatek/connectivity/conn_soc/drv_wlan/mt_wifi/wlan/os/linux/gl_kal.c
++++ b/drivers/misc/mediatek/connectivity/conn_soc/drv_wlan/mt_wifi/wlan/os/linux/gl_kal.c
+@@ -774,9 +774,15 @@
+     IN P_GLUE_INFO_T                prGlueInfo
+     )
+ {
++    /* D46 (m5 power): bound the WLAN AHB ISR suspend window 100ms -> 20ms.
++     * The 100 ms hold keeps the chip out of power-save on every ISR burst
++     * and was the dominant deep-sleep blocker at idle (spec
++     * bob-m5-power-audio §1.1 item 3, ADR-m5-WS1 W1/K4; revert criterion §8
++     * R3). HifAhbISR wake_up, wakelock names and HifAhbPltmSuspend/Resume
++     * are unchanged. */
+     KAL_WAKE_LOCK_TIMEOUT(prGlueInfo->prAdapter,
+                         &(prGlueInfo->rAhbIsrWakeLock),
+-                        (HZ/10)); /* 100ms */
++                        (HZ/50)); /* 20ms */
+ }
+ 
+ #if CFG_ENABLE_FW_DOWNLOAD

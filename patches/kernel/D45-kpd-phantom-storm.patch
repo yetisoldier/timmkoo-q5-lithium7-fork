@@ -1,0 +1,294 @@
+# D45 — m5 power: phantom-input storm kill (kernel tag d45).
+# Spec (binding): .specs/bob-m5-power-audio-spec.md §2 (ADR-m5-WS1 option W1),
+# §5.1.1; DELTA-NOTES: patches/kernel/DELTA-NOTES.md "D45".
+#
+# THE DEFECT: at screen-off idle the event0 device delivered ~2.9 Hz phantom
+# KEY_VOLUMEDOWN press/release pairs. Every idle wake from that chain kept
+# the platform out of deep sleep (60-min uptime/realtime baseline 0.66).
+#
+# THE FIX (four dead-bolts, all required — the build gates assert each):
+#  1. arch/arm/mach-mt6582/q5/keypad/mtk_kpd.h (K1): DELETE the
+#     KPD_PMIC_RSTKEY_MAP (=KEY_VOLUMEDOWN) define. The Q5 fchrkey pin is
+#     unwired; D22 PTY evidence places VOLDOWN on matrix slot [1]
+#     (cust_kpd.h keymap {[0]=KEY_VOLUMEUP,[1]=KEY_VOLUMEDOWN}), so the PMIC
+#     rstkey mapping could only ever be the phantom reporter. The #ifdef'd
+#     users of the define (kpd.c kpd_pmic_rstkey_handler/probe keybit,
+#     hal_kpd.c kpd_pmic_rstkey_hal) compile out cleanly.
+#  2. drivers/misc/mediatek/power/mt6582/pmic_mt6323.c (K2): the fchrkey IRQ
+#     is disabled at BOTH enable points — cust_pmic_interrupt_en_setting()
+#     (upmu_set_rg_int_en_fchrkey 1->0) and both 0x166,[1:1] register pokes
+#     in PMIC_INIT_SETTING_V1() (0x166,0x1->0x166,0x0). pwrkey stays enabled
+#     (upmu_set_rg_int_en_pwrkey(1) untouched) — the build gate greps it.
+#  3. drivers/misc/mediatek/keypad/kpd.c (K3): the matrix tasklet no longer
+#     reports keys directly (old code reported ANY change bit with zero
+#     confirmation, and hal_kpd.c's per-sample "register =" dump printed on
+#     every scan). Instead it only samples the matrix; a delayed work item
+#     re-reads it kpd_glitch_ms (default 150, module param) later and reports
+#     only bits stable across both samples that differ from the last reported
+#     state. Unstable bits are counted (kpd_glitch_drops) and logged
+#     printk_ratelimited — this is the §6 storm-death-certificate metric.
+#     AEE 5s/15s logic, hrtimers and the backlight handler are unchanged;
+#     suspend cancels the pending work; resume re-syncs the baselines
+#     without reporting (no stuck key for a press spanning suspend).
+#     No msleep/schedule_timeout in the tasklet; system workqueue only.
+#  4. drivers/misc/mediatek/keypad/mt6582/hal_kpd.c: the "register = %x…"
+#     scan dump (printed on EVERY matrix sample at line ~317) is gated on a
+#     new module param kpd_show_scan (default 0). The press/release printk
+#     stays on the existing kpd_show_hw_keycode flag (§6 field prints).
+#
+# HOST TEST: build/test_kpd_filter.py G1–G6 (runs in the 82 kernel chain,
+# before flash). §8 R2 revert criterion: kpd_glitch_ms=0 restores old
+# reporting shape (single-sample, minus the direct tasklet path).
+--- a/arch/arm/mach-mt6582/q5/keypad/mtk_kpd.h
++++ b/arch/arm/mach-mt6582/q5/keypad/mtk_kpd.h
+@@ -81,7 +81,18 @@
+ #define TWOKEY_REBOOT_NORMAL_MODE
+ //#define ONEKEY_REBOOT_OTHER_MODE
+ #define TWOKEY_REBOOT_OTHER_MODE
+-#define KPD_PMIC_RSTKEY_MAP KEY_VOLUMEDOWN
++/*
++ * D45 (m5 power: phantom-input storm kill) — KPD_PMIC_RSTKEY_MAP ("VOL down on
++ * PMIC fchrkey") is DELETED, deliberately and permanently. The Q5 fchrkey pin
++ * is unwired on this board: D22 PTY evidence places VOLDOWN on matrix slot [1]
++ * (cust_kpd.h keymap {[0]=KEY_VOLUMEUP,[1]=KEY_VOLUMEDOWN}), not on the PMIC
++ * reset key. With the fchrkey IRQ left storming, it produced phantom
++ * KEY_VOLUMEDOWN press/release pairs on event0 while screen-off idle (m5
++ * evidence; the same storm the D22 PMIC evidence chain documented). The
++ * interrupt is likewise dead in power/mt6582/pmic_mt6323.c
++ * (cust_pmic_interrupt_en_setting + PMIC_INIT_SETTING_V1). Both the map and
++ * the IRQ must stay dead — see build/82_kernel_delta_power_audio.sh gates.
++ */
+ #define KPD_PMIC_LPRST_TD 1 /* timeout period. 0: 7sec; 1: 11sec; 2: 14sec; 3: 5sec */
+ 
+ #endif
+--- a/drivers/misc/mediatek/power/mt6582/pmic_mt6323.c
++++ b/drivers/misc/mediatek/power/mt6582/pmic_mt6323.c
+@@ -575,7 +575,8 @@
+     upmu_set_rg_int_en_ov(0);
+     
+     upmu_set_rg_int_en_ldo(0);
+-    upmu_set_rg_int_en_fchrkey(1);
++    /* D45: Q5 fchrkey is unwired — kill its IRQ so the phantom-input storm dies here (m5). */
++    upmu_set_rg_int_en_fchrkey(0);
+     //upmu_set_rg_int_en_accdet(1);
+     upmu_set_rg_int_en_audio(0);
+     upmu_set_rg_int_en_rtc(1);
+@@ -3403,7 +3404,7 @@
+ ret = pmic_config_interface(0x160,0x1,0x1,2); // [2:2]: RG_INT_EN_BAT_L; 
+ ret = pmic_config_interface(0x160,0x1,0x1,6); // [6:6]: RG_INT_EN_THR_L; 
+ ret = pmic_config_interface(0x160,0x1,0x1,7); // [7:7]: RG_INT_EN_THR_H; 
+-ret = pmic_config_interface(0x166,0x1,0x1,1); // [1:1]: RG_INT_EN_FCHRKEY; 
++ret = pmic_config_interface(0x166,0x0,0x1,1); // [1:1]: RG_INT_EN_FCHRKEY; /* D45: fchrkey IRQ off (m5, Q5 pin unwired) */
+ ret = pmic_config_interface(0x212,0x2,0x3,4); // [5:4]: QI_VPROC_VSLEEP; 
+ ret = pmic_config_interface(0x216,0x1,0x1,1); // [1:1]: VPROC_VOSEL_CTRL; 
+ ret = pmic_config_interface(0x21C,0x17,0x7F,0); // [6:0]: VPROC_SFCHG_FRATE; 
+@@ -3492,7 +3493,7 @@
+ ret = pmic_config_interface(0x160,0x1,0x1,2); // [2:2]: RG_INT_EN_BAT_L; 
+ ret = pmic_config_interface(0x160,0x1,0x1,6); // [6:6]: RG_INT_EN_THR_L; 
+ ret = pmic_config_interface(0x160,0x1,0x1,7); // [7:7]: RG_INT_EN_THR_H; 
+-ret = pmic_config_interface(0x166,0x1,0x1,1); // [1:1]: RG_INT_EN_FCHRKEY; 
++ret = pmic_config_interface(0x166,0x0,0x1,1); // [1:1]: RG_INT_EN_FCHRKEY; /* D45: fchrkey IRQ off (m5, Q5 pin unwired) */
+ ret = pmic_config_interface(0x212,0x2,0x3,4); // [5:4]: QI_VPROC_VSLEEP; 
+ ret = pmic_config_interface(0x216,0x1,0x1,1); // [1:1]: VPROC_VOSEL_CTRL; 
+ ret = pmic_config_interface(0x21C,0x17,0x7F,0); // [6:0]: VPROC_SFCHG_FRATE; 
+--- a/drivers/misc/mediatek/keypad/kpd.c
++++ b/drivers/misc/mediatek/keypad/kpd.c
+@@ -44,6 +44,15 @@
+ /*for kpd_memory_setting() function*/
+ static u16 kpd_keymap[KPD_NUM_KEYS];
+ static u16 kpd_keymap_state[KPD_NUM_MEMS];
++/* D45 (m5 power: phantom-input storm kill): keys are reported only from
++ * kpd_glitch_work_func, after two matrix scan samples taken kpd_glitch_ms
++ * apart agree. The tasklet only samples; a genuine press survives the delay,
++ * the unwired-fchrkey phantom glitch pairs (m5 evidence) do not. */
++static int kpd_glitch_ms = 150;
++static u16 kpd_pending_state[KPD_NUM_MEMS];
++static u16 kpd_reported_state[KPD_NUM_MEMS];
++static struct delayed_work kpd_glitch_work;
++static unsigned long kpd_glitch_drops;
+ /***********************************/
+ 
+ /* for slide QWERTY */
+@@ -381,38 +390,43 @@
+ 
+ /*********************************************************************/
+ 
+-/*********************************************************************/
+-static void kpd_keymap_handler(unsigned long data)
++/* D45 (m5 power: phantom-input storm kill): the only key reporter. Runs on
++ * the system workqueue kpd_glitch_ms after the IRQ sample, re-reads the
++ * matrix and reports exactly the bits that agree between the two samples
++ * (tasklet S1 in kpd_pending_state, work S2 below) AND differ from the last
++ * reported state. A phantom glitch pair that self-cancels inside the window
++ * leaves its bits back at the baseline: they never agree-with-and-differ, so
++ * nothing is reported. Genuine holds differ from the baseline at both
++ * samples, so press and release are still delivered
++ * (host build/test_kpd_filter.py G1–G6). */
++static void kpd_glitch_work_func(struct work_struct *work)
+ {
++	u16 s2[KPD_NUM_MEMS];
++	unsigned long dropped = 0;
+ 	int i, j;
+-	bool pressed;
+-	u16 new_state[KPD_NUM_MEMS], change, mask;
+-	u16 hw_keycode, linux_keycode;
+-	kpd_get_keymap_state(new_state);
++
++	kpd_get_keymap_state(s2);
+ 
+ 	for (i = 0; i < KPD_NUM_MEMS; i++) {
+-		change = new_state[i] ^ kpd_keymap_state[i];
+-		if (!change)
+-			continue;
++		u16 stable_mask = ~(kpd_pending_state[i] ^ s2[i]);
++		u16 changed = s2[i] ^ kpd_reported_state[i];
++		u16 report_mask = changed & stable_mask;
++		u16 unstable = ~(stable_mask); /* S1[i] ^ S2[i] */
+ 
+ 		for (j = 0; j < 16; j++) {
+-			mask = 1U << j;
+-			if (!(change & mask))
++			u16 hw_keycode, linux_keycode;
++			bool pressed;
++
++			if (!(report_mask & (1U << j)))
+ 				continue;
+ 
+ 			hw_keycode = (i << 4) + j;
+ 			/* bit is 1: not pressed, 0: pressed */
+-			pressed = !(new_state[i] & mask);
+-			if (kpd_show_hw_keycode) {
+-				printk(KPD_SAY "(%s) HW keycode = %u\n",
+-				       pressed ? "pressed" : "released", hw_keycode);
+-			}
++			pressed = !(s2[i] & (1U << j));
+ 			BUG_ON(hw_keycode >= KPD_NUM_KEYS);
+ 			linux_keycode = kpd_keymap[hw_keycode];
+-			if (unlikely(linux_keycode == 0)) {
+-				kpd_print("Linux keycode = 0\n");
++			if (unlikely(linux_keycode == 0))
+ 				continue;
+-			}
+ 			kpd_aee_handler(linux_keycode, pressed);
+ 
+ 			kpd_backlight_handler(pressed, linux_keycode);
+@@ -420,10 +434,32 @@
+ 			input_sync(kpd_input_dev);
+ 			kpd_print("report Linux keycode = %u\n", linux_keycode);
+ 		}
+-	}
+ 
+-	memcpy(kpd_keymap_state, new_state, sizeof(new_state));
+-	kpd_print("save new keymap state\n");
++		/* The drop counter is the storm's death certificate: count the
++		 * bits the window killed (unstable between S1 and S2 — always
++		 * unreportable, since reporting requires stability), not only
++		 * the subset that also differs from the reported state. A
++		 * self-contained glitch pulse leaves S2 back at the baseline,
++		 * so the reported-relative form would count 0 and §5.5 G2/G3
++		 * plus the §6 attribution metric would be unsatisfiable. */
++		dropped += hweight16(unstable);
++		kpd_reported_state[i] = (s2[i] & stable_mask) |
++					(kpd_reported_state[i] & ~stable_mask);
++	}
++
++	kpd_glitch_drops += dropped;
++	if (dropped)
++		printk_ratelimited(KERN_INFO KPD_SAY "dropped %lu glitch bits\n",
++				   kpd_glitch_drops);
++}
++
++static void kpd_keymap_handler(unsigned long data)
++{
++	/* D45: sample only — reporting happens in kpd_glitch_work_func above.
++	 * No msleep/schedule_timeout here (tasklet): the wait is the delayed
++	 * work below. */
++	kpd_get_keymap_state(kpd_pending_state);
++	schedule_delayed_work(&kpd_glitch_work, msecs_to_jiffies(kpd_glitch_ms));
+ #ifdef CONFIG_OF
+ 	enable_irq(kp_irqnr);
+ #else
+@@ -880,6 +916,13 @@
+ 	aee_timer_5s.function = aee_timer_5s_func;
+ #endif
+ 
++	/* D45: glitch-filter baselines start from the same initial map as
++	 * kpd_keymap_state (all-released), and the work item is registered
++	 * before any IRQ can land. */
++	kpd_init_keymap_state(kpd_pending_state);
++	kpd_init_keymap_state(kpd_reported_state);
++	INIT_DELAYED_WORK(&kpd_glitch_work, kpd_glitch_work_func);
++
+ 	if ((err = kpd_create_attr(&kpd_pdrv.driver))) {
+ 		kpd_print("create attr file fail\n");
+ 		kpd_delete_attr(&kpd_pdrv.driver);
+@@ -898,6 +941,10 @@
+ #ifndef USE_EARLY_SUSPEND
+ static int kpd_pdrv_suspend(struct platform_device *pdev, pm_message_t state)
+ {
++	/* D45: a glitch work queued just before suspend must not fire from
++	 * stale scan memory while the keypad is powered down. Must be the
++	 * first statement so it also runs before the wake-source switch. */
++	cancel_delayed_work_sync(&kpd_glitch_work);
+ 	kpd_suspend = true;
+ #ifdef MTK_KP_WAKESOURCE
+ 	if (call_status == 2) {
+@@ -914,6 +961,8 @@
+ 
+ static int kpd_pdrv_resume(struct platform_device *pdev)
+ {
++	u16 buf[KPD_NUM_MEMS];
++
+ 	kpd_suspend = false;
+ #ifdef MTK_KP_WAKESOURCE
+ 	if (call_status == 2) {
+@@ -923,6 +972,12 @@
+ 		kpd_wakeup_src_setting(1);
+ 	}
+ #endif
++	/* D45: re-sync the glitch-filter baselines without reporting — a press
++	 * spanning the suspend must surface as a plain release on wake (or
++	 * keep being held), never as a stuck key. */
++	kpd_get_keymap_state(buf);
++	memcpy(kpd_reported_state, buf, sizeof(kpd_reported_state));
++	memcpy(kpd_pending_state, buf, sizeof(kpd_pending_state));
+ 	kpd_print("resume!! (%d)\n", kpd_suspend);
+ 	return 0;
+ }
+@@ -1010,6 +1065,7 @@
+ 
+ module_param(kpd_show_hw_keycode, int, 0644);
+ module_param(kpd_show_register, int, 0644);
++module_param(kpd_glitch_ms, int, 0644);
+ 
+ MODULE_AUTHOR("yucong.xiong <yucong.xiong@mediatek.com>");
+ MODULE_DESCRIPTION("MTK Keypad (KPD) Driver v0.4");
+--- a/drivers/misc/mediatek/keypad/mt6582/hal_kpd.c
++++ b/drivers/misc/mediatek/keypad/mt6582/hal_kpd.c
+@@ -19,6 +19,10 @@
+ #endif
+ 
+ static int kpd_show_hw_keycode = 1;
++/* D45 (m5 power: phantom-input storm kill): the per-sample matrix-dump
++ * printk below is chatty at idle; keep the data but gate it on a module
++ * param (build/test_kpd_filter.py greps this gate). */
++static int kpd_show_scan = 0;
+ static int kpd_enable_lprst = 1;
+ static void mtk_kpd_get_gpio_col(unsigned int COL_REG[]);
+ 
+@@ -314,10 +318,13 @@
+ 	state[2] = *(volatile u16 *)KP_MEM3;
+ 	state[3] = *(volatile u16 *)KP_MEM4;
+ 	state[4] = *(volatile u16 *)KP_MEM5;
+-	printk(KPD_SAY "register = %x %x %x %x %x\n",state[0], state[1], state[2], state[3], state[4]);
+-	
++	if (kpd_show_scan)
++		printk(KPD_SAY "register = %x %x %x %x %x\n",state[0], state[1], state[2], state[3], state[4]);
++
+ }
+ 
++module_param(kpd_show_scan, int, 0644);
++
+ static void kpd_factory_mode_handler(void)
+ {
+ 	int i, j;

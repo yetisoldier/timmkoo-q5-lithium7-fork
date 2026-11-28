@@ -362,3 +362,20 @@ asserts each invariant and aborts on violation. Their deltas are *selections* an
   `mtk-tpd-kpd` event nodes, physical swipe coordinates, both volume keys,
   boot/display/charging unchanged. If the panel still NAKs: D26 diagnostic
   image only (never ships).
+
+## D45 (m5 power: phantom-input storm kill)
+- Invariants asserted by build/82 gates:
+  (1) mtk_kpd.h no longer defines KPD_PMIC_RSTKEY_MAP (grep must FAIL);
+  (2) cust_pmic_interrupt_en_setting enables fchrkey with argument 0;
+  (3) PMIC_INIT_SETTING_V1 has zero '0x166,0x1,0x1,1' occurrences;
+  (4) upmu_set_rg_int_en_pwrkey(1) unchanged (grep must find it);
+  (5) cust_kpd.h keymap still {[0]=KEY_VOLUMEUP,[1]=KEY_VOLUMEDOWN}, KPD_KEY_DEBOUNCE 1024;
+  (6) kpd.c reports keys only from kpd_glitch_work_func (grep: input_report_key count in
+      kpd_keymap_handler body == 0);
+  (7) D39 contract intact: build/test_touch_key_protocol.py passes (runs in 75-chain for d45).
+- Rationale: .specs/bob-m5-power-audio-spec.md §1.1/§2 (W1).
+
+## D46 (m5 power: bound WLAN AHB ISR suspend window 100ms -> 20ms)
+- Invariants: HifAhbISR wake_up call unchanged; "WLAN AHB ISR"/"WLAN TX THREAD" names unchanged;
+  HifAhbPltmSuspend/Resume untouched; q5_defconfig CONSYS_6582 selection unchanged.
+- Rationale: .specs/bob-m5-power-audio-spec.md §1.1 item 3, §2 (W1/K4); revert criterion §8 R3.
